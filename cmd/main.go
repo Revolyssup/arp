@@ -15,6 +15,12 @@ import (
 
 var filename = "./static.yaml"
 
+func init() {
+	configPath := os.Getenv("ARP_CONFIG")
+	if configPath != "" {
+		filename = configPath
+	}
+}
 func main() {
 	staticConfig, err := loadStaticConfig(filename)
 	if err != nil {
