@@ -21,15 +21,13 @@ routes:
   - name: route1
     listener: http
     matches:
-      - path: "/"
-    target: backend1
-
-upstreams:
-  - name: backend1
-    type: loadbalancer
-    nodes:
-      - url: http://httpbin.org/headers
-      - url: http://httpbin.org/ip
+      - path: /
+    upstream:
+      name: backend1
+      nodes:
+        - url: http://httpbin.org/headers
+        - url: http://httpbin.org/ip
+      
 ```
 
 ### Usage
