@@ -44,11 +44,11 @@ func NewCompositeMatcher(matchConfigs []config.Match) (Matcher, error) {
 
 func (m *compositeMatcher) Match(r *http.Request) bool {
 	for _, matcher := range m.matchers {
-		if !matcher.Match(r) {
-			return false
+		if matcher.Match(r) {
+			return true
 		}
 	}
-	return true
+	return false
 }
 
 type pathMatcher struct {

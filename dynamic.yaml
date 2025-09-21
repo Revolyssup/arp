@@ -1,8 +1,8 @@
 routes:
   - name: route1
     listener: http
-    match:
-      path: /
+    matches:
+      - path: /
     upstream:
       name: backend1
       nodes:

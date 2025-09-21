@@ -33,7 +33,6 @@ func (r *HTTPRouter) UpdateRoutes(routeConfigs []config.RouteConfig) error {
 		if rc.Listener != r.listener {
 			continue // Skip routes not meant for this listener
 		}
-		// Create matcher
 		matcher, err := NewCompositeMatcher(rc.Matches)
 		if err != nil {
 			return err

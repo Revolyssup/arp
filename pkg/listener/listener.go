@@ -27,7 +27,6 @@ func NewListener(cfg config.ListenerConfig, eventBus *eventbus.EventBus[config.D
 		Handler: l.router,
 	}
 	go func() {
-		fmt.Println("Listener", cfg.Name, "subscribing to config updates")
 		for dynCfg := range eventBus.Subscribe(cfg.Name) {
 			l.updateRoutes(dynCfg.Routes)
 		}

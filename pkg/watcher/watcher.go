@@ -50,7 +50,6 @@ func (w *Watcher) Watch() {
 }
 
 func (w *Watcher) processConfig(dynCfg config.Dynamic) {
-	fmt.Println("Watcher received new dynamic config", dynCfg.Routes[0].Listener)
 	// Group routes by listener
 	listenerRoutes := make(map[string][]config.RouteConfig)
 	for _, route := range dynCfg.Routes {
