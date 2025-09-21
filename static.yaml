@@ -1,0 +1,9 @@
+listeners:
+  - name: http
+    port: 8080
+
+providers:
+  - name: file
+    type: file
+    config:
+      path: "./dynamic.yaml"
