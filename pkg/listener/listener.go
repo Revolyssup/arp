@@ -28,7 +28,7 @@ func NewListener(cfg config.ListenerConfig, eventBus *eventbus.EventBus[config.D
 	}
 	go func() {
 		for dynCfg := range eventBus.Subscribe(cfg.Name) {
-			l.updateRoutes(dynCfg.Routes, dynCfg.Upstreams)
+			l.updateRoutes(dynCfg.Routes, dynCfg.Upstreams, dynCfg.Plugins)
 		}
 	}()
 	return l
@@ -41,9 +41,10 @@ func (l *Listener) Start() error {
 	return l.server.ListenAndServe()
 }
 
-func (l *Listener) updateRoutes(routes []config.RouteConfig, upstreams []config.UpstreamConfig) {
+// TODO: Refactor the updation logic from this ugly mess of passing each config type separately.
+func (l *Listener) updateRoutes(routes []config.RouteConfig, upstreams []config.UpstreamConfig, plugins []config.PluginConfig) {
 	log.Print("Updating routes for listener ", l.config.Name)
-	l.router.UpdateRoutes(routes, upstreams)
+	l.router.UpdateRoutes(routes, upstreams, plugins)
 }
 
 func (l *Listener) Stop() error {

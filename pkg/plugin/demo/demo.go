@@ -1,6 +1,7 @@
 package demo
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/Revolyssup/arp/pkg/plugin/types"
@@ -15,7 +16,7 @@ type DemoResponseWriter struct {
 	plugin *DemoPlugin
 }
 
-func NewPlugin() *DemoPlugin {
+func NewPlugin() types.Plugin {
 	return &DemoPlugin{
 		config: types.PluginConf{},
 	}
@@ -31,7 +32,9 @@ func (p *DemoPlugin) SetConfig(conf types.PluginConf) {
 
 func (p *DemoPlugin) HandleRequest(req *http.Request) error {
 	req.Header.Set("X-Demo-Plugin", "RequestProcessed")
-	for k, v := range p.GetConfig() {
+	conf := p.GetConfig()
+	fmt.Println("Demo Plugin Config:", conf)
+	for k, v := range conf {
 		if strVal, ok := v.(string); ok {
 			req.Header.Set("X-Demo-"+k, strVal)
 		}

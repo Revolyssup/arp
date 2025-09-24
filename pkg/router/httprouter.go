@@ -28,11 +28,16 @@ func NewHTTPRouter(listener string) *HTTPRouter {
 	}
 }
 
-func (r *HTTPRouter) UpdateRoutes(routeConfigs []config.RouteConfig, upstreamConfigs []config.UpstreamConfig) error {
+func (r *HTTPRouter) UpdateRoutes(routeConfigs []config.RouteConfig, upstreamConfigs []config.UpstreamConfig, pluginConfigs []config.PluginConfig) error {
 	var newRoutes []*Route
 	upstreamMap := make(map[string]config.UpstreamConfig)
 	for _, up := range upstreamConfigs {
 		upstreamMap[up.Name] = up
+	}
+
+	pluginMap := make(map[string]*config.PluginConfig)
+	for _, p := range pluginConfigs {
+		pluginMap[p.Name] = &p
 	}
 	for _, rc := range routeConfigs {
 		if rc.Listener != r.listener {
@@ -60,10 +65,16 @@ func (r *HTTPRouter) UpdateRoutes(routeConfigs []config.RouteConfig, upstreamCon
 		// Create plugin chain
 		pluginChain := plugin.NewChain()
 		for _, pCfg := range rc.Plugins {
-			if p, exists := plugin.Registry.Get(pCfg.Name); exists {
+			if pluginMap[pCfg.Name] != nil {
+				pCfg = *pluginMap[pCfg.Name]
+			}
+			if pluginFactory, exists := plugin.Registry.Get(pCfg.Type); exists {
+				plugin := pluginFactory()
 				log.Printf("Adding plugin %s to route %s", pCfg.Name, rc.Name)
-				p.SetConfig(pCfg.Config)
-				pluginChain.Add(p)
+				plugin.SetConfig(pCfg.Config)
+				pluginChain.Add(plugin)
+			} else {
+				log.Printf("Plugin type %s not found for plugin %s in route %s", pCfg.Type, pCfg.Name, rc.Name)
 			}
 		}
 		newRoutes = append(newRoutes, &Route{

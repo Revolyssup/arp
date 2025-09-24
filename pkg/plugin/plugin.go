@@ -54,5 +54,5 @@ var Registry *types.Registry
 
 func init() {
 	Registry = types.NewRegistry()
-	Registry.Register("demo", demo.NewPlugin())
+	Registry.Register("demo", demo.NewPlugin)
 }

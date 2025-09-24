@@ -5,6 +5,8 @@ routes:
       - path: /ip
     upstream:
       name: backend1
+    plugins:
+      - name: demo2
   - name: route2
     listener: http
     matches:
@@ -13,10 +15,17 @@ routes:
       name: backend1
     plugins:
       - name: demo
-        config:
-          message: "Hello from demo plugin!"
 upstreams:
   - name: backend1
     nodes:
       - url: http://httpbin.org/headers
       # - url: http://mockbin.org/headers
+plugins:
+  - name: demo
+    type: demo
+    config:
+      message: "Hello from demo plugin!"
+  - name: demo2
+    type: demo
+    config:
+      message: "Hello from demo2 plugin!"

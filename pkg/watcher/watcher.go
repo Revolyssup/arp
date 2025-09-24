@@ -59,6 +59,11 @@ func (w *Watcher) processConfig(dynCfg config.Dynamic) {
 	for _, upstream := range dynCfg.Upstreams {
 		upstreamMap[upstream.Name] = upstream
 	}
+
+	pluginMap := make(map[string]config.PluginConfig)
+	for _, plugin := range dynCfg.Plugins {
+		pluginMap[plugin.Name] = plugin
+	}
 	for listenerName, routes := range listenerRoutes {
 		upstreamConfigs := make([]config.UpstreamConfig, 0, len(upstreamMap))
 		for _, route := range routes {
@@ -68,9 +73,19 @@ func (w *Watcher) processConfig(dynCfg config.Dynamic) {
 				}
 			}
 		}
+
+		pluginConfigs := make([]config.PluginConfig, 0, len(pluginMap))
+		for _, route := range routes {
+			for _, p := range route.Plugins {
+				if pl, exists := pluginMap[p.Name]; exists {
+					pluginConfigs = append(pluginConfigs, pl)
+				}
+			}
+		}
 		listenerConfig := config.Dynamic{
 			Routes:    routes,
 			Upstreams: upstreamConfigs,
+			Plugins:   pluginConfigs,
 		}
 		hash, err := w.calculateHash(listenerConfig)
 		if err != nil {

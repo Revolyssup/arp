@@ -15,6 +15,8 @@ type Plugin interface {
 	SetConfig(PluginConf)
 }
 
+type PluginFactory func() Plugin
+
 type ResponseWriterWrapper interface {
 	http.ResponseWriter
 	Unwrap() http.ResponseWriter
@@ -42,19 +44,19 @@ func (b *BaseResponseWriter) Header() http.Header {
 }
 
 type Registry struct {
-	plugins map[string]Plugin
+	plugins map[string]PluginFactory
 }
 
 func NewRegistry() *Registry {
 	return &Registry{
-		plugins: make(map[string]Plugin),
+		plugins: make(map[string]PluginFactory),
 	}
 }
-func (r *Registry) Register(name string, plugin Plugin) {
-	r.plugins[name] = plugin
+func (r *Registry) Register(typ string, pluginFactory PluginFactory) {
+	r.plugins[typ] = pluginFactory
 }
 
-func (r *Registry) Get(name string) (Plugin, bool) {
-	p, exists := r.plugins[name]
+func (r *Registry) Get(typ string) (PluginFactory, bool) {
+	p, exists := r.plugins[typ]
 	return p, exists
 }

@@ -5,7 +5,7 @@ import "github.com/Revolyssup/arp/pkg/plugin/types"
 type Dynamic struct {
 	Routes    []RouteConfig    `yaml:"routes"`
 	Upstreams []UpstreamConfig `yaml:"upstreams,omitempty"`
-	// Plugins   []PluginConfig   `yaml:"plugins,omitempty"` //TODO: support id as well as global plugins
+	Plugins   []PluginConfig   `yaml:"plugins,omitempty"`
 }
 
 type RouteConfig struct {
@@ -43,5 +43,6 @@ type DiscoveryRef struct {
 
 type PluginConfig struct {
 	Name   string           `yaml:"name"`
+	Type   string           `yaml:"type"`
 	Config types.PluginConf `yaml:"config"`
 }
