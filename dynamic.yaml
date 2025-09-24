@@ -2,10 +2,21 @@ routes:
   - name: route1
     listener: http
     matches:
-      - path: /
+      - path: /ip
     upstream:
       name: backend1
-      nodes:
-        - url: http://httpbin.org/headers
-        - url: http://httpbin.org/ip
-      
+  - name: route2
+    listener: http
+    matches:
+      - path: /headers
+    upstream:
+      name: backend1
+    plugins:
+      - name: demo
+        config:
+          message: "Hello from demo plugin!"
+upstreams:
+  - name: backend1
+    nodes:
+      - url: http://httpbin.org/headers
+      # - url: http://mockbin.org/headers

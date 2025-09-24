@@ -13,7 +13,6 @@ import (
 )
 
 type Watcher struct {
-	providers      []provider.Provider
 	eventBus       *eventbus.EventBus[config.Dynamic]
 	receiveChan    chan config.Dynamic
 	listenerHashes map[string]string // Maps listener name to config hash
@@ -25,7 +24,6 @@ func NewWatcher(providers []config.ProviderConfig, eventBus *eventbus.EventBus[c
 	}
 	watcher := &Watcher{
 		eventBus:       eventBus,
-		providers:      make([]provider.Provider, 0, len(providers)),
 		receiveChan:    make(chan config.Dynamic, 10), // Buffered channel
 		listenerHashes: make(map[string]string),
 	}
@@ -37,7 +35,6 @@ func NewWatcher(providers []config.ProviderConfig, eventBus *eventbus.EventBus[c
 		default:
 			continue // Unsupported provider type
 		}
-		watcher.providers = append(watcher.providers, p)
 		go p.Provide(watcher.receiveChan)
 	}
 	return watcher
@@ -49,6 +46,7 @@ func (w *Watcher) Watch() {
 	}
 }
 
+// processConfig helps to send each provider config for the listener that it's specifically subscribed to.
 func (w *Watcher) processConfig(dynCfg config.Dynamic) {
 	// Group routes by listener
 	listenerRoutes := make(map[string][]config.RouteConfig)
@@ -56,9 +54,23 @@ func (w *Watcher) processConfig(dynCfg config.Dynamic) {
 		listenerRoutes[route.Listener] = append(listenerRoutes[route.Listener], route)
 	}
 
+	// Group upstreams by routes that reference them
+	upstreamMap := make(map[string]config.UpstreamConfig)
+	for _, upstream := range dynCfg.Upstreams {
+		upstreamMap[upstream.Name] = upstream
+	}
 	for listenerName, routes := range listenerRoutes {
+		upstreamConfigs := make([]config.UpstreamConfig, 0, len(upstreamMap))
+		for _, route := range routes {
+			if route.Upstream != nil && route.Upstream.Name != "" {
+				if up, exists := upstreamMap[route.Upstream.Name]; exists {
+					upstreamConfigs = append(upstreamConfigs, up)
+				}
+			}
+		}
 		listenerConfig := config.Dynamic{
-			Routes: routes,
+			Routes:    routes,
+			Upstreams: upstreamConfigs,
 		}
 		hash, err := w.calculateHash(listenerConfig)
 		if err != nil {

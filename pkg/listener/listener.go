@@ -28,7 +28,7 @@ func NewListener(cfg config.ListenerConfig, eventBus *eventbus.EventBus[config.D
 	}
 	go func() {
 		for dynCfg := range eventBus.Subscribe(cfg.Name) {
-			l.updateRoutes(dynCfg.Routes)
+			l.updateRoutes(dynCfg.Routes, dynCfg.Upstreams)
 		}
 	}()
 	return l
@@ -41,9 +41,9 @@ func (l *Listener) Start() error {
 	return l.server.ListenAndServe()
 }
 
-func (l *Listener) updateRoutes(routes []config.RouteConfig) {
+func (l *Listener) updateRoutes(routes []config.RouteConfig, upstreams []config.UpstreamConfig) {
 	log.Print("Updating routes for listener ", l.config.Name)
-	l.router.UpdateRoutes(routes)
+	l.router.UpdateRoutes(routes, upstreams)
 }
 
 func (l *Listener) Stop() error {

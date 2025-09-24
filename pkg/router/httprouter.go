@@ -3,6 +3,8 @@ package router
 import (
 	"net/http"
 
+	"log"
+
 	"github.com/Revolyssup/arp/pkg/config"
 	"github.com/Revolyssup/arp/pkg/plugin"
 	"github.com/Revolyssup/arp/pkg/proxy"
@@ -26,9 +28,12 @@ func NewHTTPRouter(listener string) *HTTPRouter {
 	}
 }
 
-func (r *HTTPRouter) UpdateRoutes(routeConfigs []config.RouteConfig) error {
+func (r *HTTPRouter) UpdateRoutes(routeConfigs []config.RouteConfig, upstreamConfigs []config.UpstreamConfig) error {
 	var newRoutes []*Route
-
+	upstreamMap := make(map[string]config.UpstreamConfig)
+	for _, up := range upstreamConfigs {
+		upstreamMap[up.Name] = up
+	}
 	for _, rc := range routeConfigs {
 		if rc.Listener != r.listener {
 			continue // Skip routes not meant for this listener
@@ -42,7 +47,10 @@ func (r *HTTPRouter) UpdateRoutes(routeConfigs []config.RouteConfig) error {
 		if upstreamConfig == nil {
 			continue // Skip routes with missing upstreams
 		}
-
+		//If upstream configuration exists, then it will override the upstream passed in route.
+		if up, exists := upstreamMap[upstreamConfig.Name]; exists {
+			upstreamConfig = &up
+		}
 		// Create upstream
 		up, err := upstream.NewUpstream(*upstreamConfig)
 		if err != nil {
@@ -50,19 +58,17 @@ func (r *HTTPRouter) UpdateRoutes(routeConfigs []config.RouteConfig) error {
 		}
 
 		// Create plugin chain
-		// pluginChain := plugin.NewChain()
-		// for _, pc := range rc.Plugins {
-		// 	if p, err := plugin.Get(pc.Name); err == nil {
-		// 		pluginChain.Add(p.New(pc.Config))
-		// 	}
-		// }
-
-		// Sort plugins by priority
-		// pluginChain.Sort()
-
+		pluginChain := plugin.NewChain()
+		for _, pCfg := range rc.Plugins {
+			if p, exists := plugin.Registry.Get(pCfg.Name); exists {
+				log.Printf("Adding plugin %s to route %s", pCfg.Name, rc.Name)
+				p.SetConfig(pCfg.Config)
+				pluginChain.Add(p)
+			}
+		}
 		newRoutes = append(newRoutes, &Route{
-			matcher: matcher,
-			// plugins:  pluginChain,
+			matcher:  matcher,
+			plugins:  pluginChain,
 			upstream: up,
 		})
 	}
@@ -76,11 +82,10 @@ func (r *HTTPRouter) UpdateRoutes(routeConfigs []config.RouteConfig) error {
 func (r *HTTPRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	for _, route := range r.routes {
 		if route.matcher.Match(req) {
-			// TODO: Implement Plugins
-			// if err := route.plugins.HandleRequest(req); err != nil {
-			// 	http.Error(w, err.Error(), http.StatusInternalServerError)
-			// 	return
-			// }
+			if err := route.plugins.HandleRequest(req); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
 
 			// Get upstream node
 			node := route.upstream.SelectNode()
@@ -88,8 +93,9 @@ func (r *HTTPRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 				http.Error(w, "No available upstream nodes", http.StatusServiceUnavailable)
 				return
 			}
+			wrappedWriter := route.plugins.WrapResponseWriter(w)
 			proxy := proxy.NewReverseProxy()
-			proxy.ServeHTTP(w, req, node.URL)
+			proxy.ServeHTTP(wrappedWriter, req, node.URL)
 			return
 		}
 	}
