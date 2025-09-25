@@ -37,7 +37,6 @@ type Node struct {
 
 type DiscoveryRef struct {
 	Type   string            `yaml:"type"`
-	Name   string            `yaml:"name"`
 	Params map[string]string `yaml:"params,omitempty"`
 }
 

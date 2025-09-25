@@ -7,6 +7,7 @@ import (
 	"syscall"
 
 	"github.com/Revolyssup/arp/pkg/config"
+	"github.com/Revolyssup/arp/pkg/discovery"
 	"github.com/Revolyssup/arp/pkg/eventbus"
 	"github.com/Revolyssup/arp/pkg/listener"
 	"github.com/Revolyssup/arp/pkg/watcher"
@@ -29,9 +30,10 @@ func main() {
 
 	configBus := eventbus.NewEventBus[config.Dynamic]()
 
+	discoveryManager := discovery.NewDiscoveryManager(staticConfig.DiscoveryConfigs)
 	listeners := make(map[string]*listener.Listener)
 	for _, lc := range staticConfig.Listeners {
-		l := listener.NewListener(lc, configBus)
+		l := listener.NewListener(lc, discoveryManager, configBus)
 		listeners[lc.Name] = l
 	}
 

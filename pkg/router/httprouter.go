@@ -6,14 +6,16 @@ import (
 	"log"
 
 	"github.com/Revolyssup/arp/pkg/config"
+	"github.com/Revolyssup/arp/pkg/discovery"
 	"github.com/Revolyssup/arp/pkg/plugin"
 	"github.com/Revolyssup/arp/pkg/proxy"
 	"github.com/Revolyssup/arp/pkg/upstream"
 )
 
 type HTTPRouter struct {
-	routes   []*Route
-	listener string
+	routes           []*Route
+	listener         string
+	discoveryManager *discovery.DiscoveryManager
 }
 
 type Route struct {
@@ -22,9 +24,10 @@ type Route struct {
 	upstream *upstream.Upstream
 }
 
-func NewHTTPRouter(listener string) *HTTPRouter {
+func NewHTTPRouter(listener string, discoveryManager *discovery.DiscoveryManager) *HTTPRouter {
 	return &HTTPRouter{
-		listener: listener,
+		listener:         listener,
+		discoveryManager: discoveryManager,
 	}
 }
 
@@ -57,7 +60,7 @@ func (r *HTTPRouter) UpdateRoutes(routeConfigs []config.RouteConfig, upstreamCon
 			upstreamConfig = &up
 		}
 		// Create upstream
-		up, err := upstream.NewUpstream(*upstreamConfig)
+		up, err := upstream.NewUpstream(*upstreamConfig, r.discoveryManager)
 		if err != nil {
 			return err
 		}

@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/Revolyssup/arp/pkg/config"
+	"github.com/Revolyssup/arp/pkg/discovery"
 	"github.com/Revolyssup/arp/pkg/eventbus"
 	"github.com/Revolyssup/arp/pkg/router"
 )
@@ -17,10 +18,10 @@ type Listener struct {
 	server *http.Server
 }
 
-func NewListener(cfg config.ListenerConfig, eventBus *eventbus.EventBus[config.Dynamic]) *Listener {
+func NewListener(cfg config.ListenerConfig, discoveryManager *discovery.DiscoveryManager, eventBus *eventbus.EventBus[config.Dynamic]) *Listener {
 	l := &Listener{
 		config: cfg,
-		router: router.NewHTTPRouter(cfg.Name),
+		router: router.NewHTTPRouter(cfg.Name, discoveryManager),
 	}
 	l.server = &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.Port),

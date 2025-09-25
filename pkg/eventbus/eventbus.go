@@ -1,34 +1,78 @@
 package eventbus
 
-import "sync"
+import (
+	"log"
+	"sync"
+)
 
+/*
+This is mostly stateless EventBus with one modification:
+Any new subscriber will get the last published event for a topic immediately after subscribing.
+*/
+//TODO: Can this cache be improved(ttl or something) or is it too simple to concern myself with?
 type EventBus[T any] struct {
 	subscribers map[string][]chan T
+	cache       map[string]T // Cache for last published value per topic
 	mx          sync.RWMutex
 }
 
 func NewEventBus[T any]() *EventBus[T] {
 	return &EventBus[T]{
 		subscribers: make(map[string][]chan T),
+		cache:       make(map[string]T),
 	}
 }
 
 func (eb *EventBus[T]) Subscribe(topic string) <-chan T {
 	eb.mx.Lock()
 	defer eb.mx.Unlock()
-
 	ch := make(chan T, 100)
 	eb.subscribers[topic] = append(eb.subscribers[topic], ch)
+	// Send the last cached value if it exists
+	if cached, exists := eb.cache[topic]; exists {
+		go func() {
+			ch <- cached
+		}()
+	}
+
 	return ch
 }
 
-func (eb *EventBus[T]) Publish(topic string, data T) {
-	eb.mx.RLock()
-	defer eb.mx.RUnlock()
+func (eb *EventBus[T]) Unsubscribe(topic string, ch <-chan T) {
+	eb.mx.Lock()
+	defer eb.mx.Unlock()
 
-	for _, ch := range eb.subscribers[topic] {
-		go func(ch chan T) {
-			ch <- data
-		}(ch)
+	subscribers, exists := eb.subscribers[topic]
+	if !exists {
+		return
+	}
+
+	// Find and remove the channel
+	for i, subscriber := range subscribers {
+		if subscriber == ch {
+			eb.subscribers[topic] = append(eb.subscribers[topic][:i], eb.subscribers[topic][i+1:]...)
+			close(subscriber)
+			return
+		}
+	}
+}
+
+func (eb *EventBus[T]) Publish(topic string, data T) {
+	eb.mx.Lock()
+	// Update cache first
+	eb.cache[topic] = data
+
+	// Get current subscribers for the topic
+	subscribers := make([]chan T, len(eb.subscribers[topic]))
+	copy(subscribers, eb.subscribers[topic])
+	eb.mx.Unlock()
+	for _, ch := range subscribers {
+		select {
+		case ch <- data:
+			// Successfully sent
+		default:
+			// Channel is full, log warning but don't block
+			log.Printf("WARNING: Channel full for topic %s, dropping message", topic)
+		}
 	}
 }

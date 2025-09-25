@@ -4,7 +4,8 @@ routes:
     matches:
       - path: /ip
     upstream:
-      name: backend1
+      discovery:
+        type: demo
     plugins:
       - name: demo2
   - name: route2

@@ -7,3 +7,7 @@ providers:
     type: file
     config:
       path: "./dynamic.yaml"
+discovery:
+  - type: demo
+    config:
+      interval: 10s

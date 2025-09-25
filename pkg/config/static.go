@@ -1,9 +1,9 @@
 package config
 
 type Static struct {
-	Listeners   []ListenerConfig `yaml:"listeners"`
-	Providers   []ProviderConfig `yaml:"providers"`
-	Discoveries []DiscoveryRef   `yaml:"discoveries,omitempty"`
+	Listeners        []ListenerConfig  `yaml:"listeners"`
+	Providers        []ProviderConfig  `yaml:"providers"`
+	DiscoveryConfigs []DiscoveryConfig `yaml:"discovery"`
 }
 
 type ListenerConfig struct {
@@ -19,6 +19,11 @@ type TLSConfig struct {
 
 type ProviderConfig struct {
 	Name   string                 `yaml:"name"`
+	Type   string                 `yaml:"type"`
+	Config map[string]interface{} `yaml:"config"`
+}
+
+type DiscoveryConfig struct {
 	Type   string                 `yaml:"type"`
 	Config map[string]interface{} `yaml:"config"`
 }

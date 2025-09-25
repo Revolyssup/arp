@@ -55,3 +55,38 @@ func TestMultipleSubscribers(t *testing.T) {
 	bus.Publish(topic, 42)
 	wg.Wait()
 }
+
+// Subscribers should get the last published event immediately after subscribing.
+func TestSubscribersComeAfterPublishers(t *testing.T) {
+	bus := NewEventBus[string]()
+
+	topic := "late_topic"
+	bus.Publish(topic, "cached_message")
+	bus.Publish(topic, "cached_message2")
+	bus.Publish(topic, "cached_message3")
+	subscriber := bus.Subscribe(topic)
+
+	msg := <-subscriber
+	if msg != "cached_message3" {
+		t.Errorf("expected 'cached_message3', got '%s'", msg)
+	}
+}
+
+func TestUnsubscribe(t *testing.T) {
+	bus := NewEventBus[string]()
+
+	topic := "unsub_topic"
+	subscriber := bus.Subscribe(topic)
+	bus.Unsubscribe(topic, subscriber)
+
+	select {
+	case msg, ok := <-subscriber:
+		if !ok {
+			return // Channel closed as expected
+		}
+		t.Errorf("expected no message after unsubscribe, but got '%s'", msg)
+	default:
+		// No message received, as expected
+	}
+
+}
