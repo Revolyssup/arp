@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
 	"os/signal"
@@ -37,8 +38,10 @@ func main() {
 		listeners[lc.Name] = l
 	}
 
-	cfgWatcher := watcher.NewWatcher(staticConfig.Providers, configBus)
-	go cfgWatcher.Watch()
+	listenerProcessor := listener.NewListenerProcessor(configBus)
+	cfgWatcher := watcher.NewWatcher(staticConfig.Providers, listenerProcessor)
+	ctx, cancel := context.WithCancel(context.Background())
+	go cfgWatcher.Watch(ctx)
 
 	for name, l := range listeners {
 		go func(name string, l *listener.Listener) {
@@ -53,6 +56,7 @@ func main() {
 	<-sigChan
 
 	log.Println("Shutting down...")
+	cancel()
 	for _, l := range listeners {
 		l.Stop()
 	}

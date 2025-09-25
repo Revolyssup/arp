@@ -1,31 +1,34 @@
 package watcher
 
 import (
-	"crypto/md5"
-	"encoding/json"
-	"fmt"
+	"context"
 	"log"
 
 	"github.com/Revolyssup/arp/pkg/config"
-	"github.com/Revolyssup/arp/pkg/eventbus"
 	"github.com/Revolyssup/arp/pkg/provider"
 	"github.com/Revolyssup/arp/pkg/provider/file"
 )
 
-type Watcher struct {
-	eventBus       *eventbus.EventBus[config.Dynamic]
-	receiveChan    chan config.Dynamic
-	listenerHashes map[string]string // Maps listener name to config hash
+// Provider-> Watcher -> Processor
+// Watcher is mainly responsbile for throttling.
+type Processor interface {
+	Process(config.Dynamic)
 }
 
-func NewWatcher(providers []config.ProviderConfig, eventBus *eventbus.EventBus[config.Dynamic]) *Watcher {
+type Watcher struct {
+	receiveChan chan config.Dynamic
+	applyChan   chan config.Dynamic
+	Processor   Processor
+}
+
+func NewWatcher(providers []config.ProviderConfig, processor Processor) *Watcher {
 	if len(providers) == 0 {
 		return nil
 	}
 	watcher := &Watcher{
-		eventBus:       eventBus,
-		receiveChan:    make(chan config.Dynamic, 10), // Buffered channel
-		listenerHashes: make(map[string]string),
+		receiveChan: make(chan config.Dynamic, 10), // Buffered channel
+		applyChan:   make(chan config.Dynamic, 10), // Buffered channel
+		Processor:   processor,
 	}
 	for _, pCfg := range providers {
 		var p provider.Provider
@@ -40,86 +43,33 @@ func NewWatcher(providers []config.ProviderConfig, eventBus *eventbus.EventBus[c
 	return watcher
 }
 
-func (w *Watcher) Watch() {
-	for dynCfg := range w.receiveChan {
-		w.processConfig(dynCfg)
-	}
-}
-
-// processConfig helps to send each provider config for the listener that it's specifically subscribed to.
-func (w *Watcher) processConfig(dynCfg config.Dynamic) {
-	// Group routes by listener
-	listenerRoutes := make(map[string][]config.RouteConfig)
-	for _, route := range dynCfg.Routes {
-		listenerRoutes[route.Listener] = append(listenerRoutes[route.Listener], route)
-	}
-
-	// Group upstreams by routes that reference them
-	upstreamMap := make(map[string]config.UpstreamConfig)
-	for _, upstream := range dynCfg.Upstreams {
-		upstreamMap[upstream.Name] = upstream
-	}
-
-	pluginMap := make(map[string]config.PluginConfig)
-	for _, plugin := range dynCfg.Plugins {
-		pluginMap[plugin.Name] = plugin
-	}
-	for listenerName, routes := range listenerRoutes {
-		upstreamConfigs := make([]config.UpstreamConfig, 0, len(upstreamMap))
-		for _, route := range routes {
-			if route.Upstream != nil && route.Upstream.Name != "" {
-				if up, exists := upstreamMap[route.Upstream.Name]; exists {
-					upstreamConfigs = append(upstreamConfigs, up)
-				}
+// Throttling mechanism inspired by configwatcher in Traefik :) (Though a simplified version)
+func (w *Watcher) Watch(ctx context.Context) {
+	go func() {
+		for dynCfg := range w.applyChan {
+			w.Processor.Process(dynCfg)
+		}
+	}()
+	var output chan config.Dynamic
+	latestConfiguration := config.Dynamic{}
+	for {
+		select {
+		case <-ctx.Done():
+			log.Println("Watcher received shutdown signal")
+			return
+		case output <- latestConfiguration:
+			output = nil
+		default:
+			select {
+			case <-ctx.Done():
+				log.Println("Watcher received shutdown signal")
+				return
+			case dynCfg := <-w.receiveChan:
+				latestConfiguration = dynCfg
+				output = w.applyChan
+			case output <- latestConfiguration:
+				output = nil
 			}
 		}
-
-		pluginConfigs := make([]config.PluginConfig, 0, len(pluginMap))
-		for _, route := range routes {
-			for _, p := range route.Plugins {
-				if pl, exists := pluginMap[p.Name]; exists {
-					pluginConfigs = append(pluginConfigs, pl)
-				}
-			}
-		}
-		listenerConfig := config.Dynamic{
-			Routes:    routes,
-			Upstreams: upstreamConfigs,
-			Plugins:   pluginConfigs,
-		}
-		hash, err := w.calculateHash(listenerConfig)
-		if err != nil {
-			log.Printf("Error calculating hash for listener %s: %v", listenerName, err)
-			continue
-		}
-
-		if prevHash, exists := w.listenerHashes[listenerName]; !exists || prevHash != hash {
-			// Config has changed, publish to event bus
-			w.eventBus.Publish(listenerName, listenerConfig)
-			w.listenerHashes[listenerName] = hash
-			log.Printf("Published updated config for listener: %s", listenerName)
-		}
 	}
-
-	// Check for listeners that have been removed
-	for listenerName := range w.listenerHashes {
-		if _, exists := listenerRoutes[listenerName]; !exists {
-			// Listener has been removed, publish empty config
-			w.eventBus.Publish(listenerName, config.Dynamic{})
-			delete(w.listenerHashes, listenerName)
-			log.Printf("Published empty config for removed listener: %s", listenerName)
-		}
-	}
-}
-
-func (w *Watcher) calculateHash(cfg config.Dynamic) (string, error) {
-	// Convert config to JSON for hashing
-	configBytes, err := json.Marshal(cfg)
-	if err != nil {
-		return "", err
-	}
-
-	// Calculate MD5 hash
-	hash := md5.Sum(configBytes)
-	return fmt.Sprintf("%x", hash), nil
 }
