@@ -9,6 +9,7 @@ import (
 )
 
 var configFile string
+var version string = "dev"
 
 func main() {
 	cmd := newARPCommand()
@@ -28,11 +29,17 @@ and plugin support for advanced routing capabilities.`,
 	}
 
 	cmd.Flags().StringVarP(&configFile, "config", "c", "./static.yaml", "Path to configuration file")
-
 	// Set default from environment variable
 	if envConfig := os.Getenv("ARP_CONFIG"); envConfig != "" {
 		configFile = envConfig
 	}
+	cmd.AddCommand(&cobra.Command{
+		Use:   "version",
+		Short: "Print the version number of ARP",
+		Run: func(cmd *cobra.Command, args []string) {
+			fmt.Println("ARP version:", version)
+		},
+	})
 
 	return cmd
 }
