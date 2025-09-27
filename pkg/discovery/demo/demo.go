@@ -28,10 +28,12 @@ func (d *DemoDiscovery) Start(name string, eb *eventbus.EventBus[[]*types.Node],
 	// For demo purposes, we will just publish a static list of nodes every 10 seconds.
 	nodes := []*types.Node{
 		{
-			URL: &url.URL{Scheme: "http", Host: "httpbin.org", Path: "/headers"},
+			ServiceName: "header",
+			URL:         &url.URL{Scheme: "http", Host: "httpbin.org", Path: "/headers"},
 		},
 		{
-			URL: &url.URL{Scheme: "http", Host: "httpbin.org", Path: "/ip"},
+			ServiceName: "ip",
+			URL:         &url.URL{Scheme: "http", Host: "httpbin.org", Path: "/ip"},
 		},
 	}
 	t := 10 * time.Second
@@ -41,12 +43,10 @@ func (d *DemoDiscovery) Start(name string, eb *eventbus.EventBus[[]*types.Node],
 		}
 	}
 	go func() {
-		//simulating pushing different nodes every interval
-		for i := 0; ; i++ {
-			d.log.Debugf("Publishing nodes for demo discovery: %v for name %s", nodes[i%len(nodes)], name)
-			eb.Publish(name, []*types.Node{nodes[i%len(nodes)]})
-			time.Sleep(t)
-		}
+		// simulate pushing updated nodes every t seconds with same servername and url
+		eb.Publish(types.ServiceDiscoveryEventKey(name, "header"), []*types.Node{nodes[0]})
+		eb.Publish(types.ServiceDiscoveryEventKey(name, "ip"), []*types.Node{nodes[1]})
+		time.Sleep(t)
 	}()
 	return nil
 }

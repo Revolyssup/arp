@@ -57,7 +57,7 @@ func newUpstream(upsConf config.UpstreamConfig, discoveryManager *discovery.Disc
 
 	// Initialize service discovery if configured
 	if upsConf.Discovery.Type != "" && discoveryManager != nil {
-		nodesEvent, err := discoveryManager.GetDiscovery(upsConf.Discovery)
+		nodesEvent, err := discoveryManager.GetDiscovery(upsConf.Discovery, upsConf.Service)
 		if err != nil {
 			return nil, fmt.Errorf("failed to initialize discovery: %v", err)
 		}

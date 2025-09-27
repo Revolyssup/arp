@@ -41,10 +41,10 @@ func NewDiscoveryManager(cfg []config.DiscoveryConfig, parentLogger *logger.Logg
 	return mgr, nil
 }
 
-func (d *DiscoveryManager) GetDiscovery(config config.DiscoveryRef) (<-chan []*types.Node, error) {
+func (d *DiscoveryManager) GetDiscovery(config config.DiscoveryRef, serviceName string) (<-chan []*types.Node, error) {
 	d.log.Warnf("discoverers %v", d)
 	if _, exists := d.discoverers[config.Type]; exists {
-		return d.eb.Subscribe(config.Type), nil
+		return d.eb.Subscribe(types.ServiceDiscoveryEventKey(config.Type, serviceName)), nil
 	}
 	return nil, fmt.Errorf("unsupported discovery type: %s", config.Type)
 }

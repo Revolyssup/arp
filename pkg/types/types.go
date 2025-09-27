@@ -16,6 +16,10 @@ func StreamRouteEventKey(listenerName string) string {
 	return "stream_routes_" + listenerName
 }
 
+func ServiceDiscoveryEventKey(typ string, serviceName string) string {
+	return "sd_" + typ + "_" + serviceName
+}
+
 type Node struct {
 	ServiceName string
 	URL         *url.URL

@@ -2,10 +2,11 @@ routes:
   - name: route1
     listener: http
     matches:
-      - path: /ip
+      - path: /abc
     upstream:
       discovery:
         type: demo
+      service: ip
     plugins:
       - name: demo2
   - name: route2
