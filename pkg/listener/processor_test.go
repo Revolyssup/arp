@@ -15,7 +15,8 @@ import (
 const TIMEOUT = 2 //seconds
 func TestListenerProcessor(t *testing.T) {
 	eventBus := eventbus.NewEventBus[config.Dynamic](logger.New(log.InfoLevel))
-	processor := NewListenerProcessor(eventBus, logger.New(log.InfoLevel))
+	dynamicValidator := config.NewDynamicValidator()
+	processor := NewListenerProcessor(eventBus, dynamicValidator, logger.New(log.InfoLevel))
 
 	type eventCollector struct {
 		mu     sync.RWMutex

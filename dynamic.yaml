@@ -20,7 +20,7 @@ routes:
 upstreams:
   - name: backend1
     nodes:
-      - url: https://httpbin.org/headers
+      - url: /httpbin.org/headers
       # - url: http://mockbin.org/headers
 plugins:
   - name: demo

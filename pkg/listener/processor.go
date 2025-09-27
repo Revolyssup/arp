@@ -13,22 +13,30 @@ import (
 )
 
 type ListenerProcessor struct {
-	eventBus       *eventbus.EventBus[config.Dynamic]
-	listenerHashes map[string]string // Maps listener name to config hash
-	logger         *logger.Logger
+	eventBus         *eventbus.EventBus[config.Dynamic]
+	listenerHashes   map[string]string // Maps listener name to config hash
+	logger           *logger.Logger
+	dynamicValidator *config.DynamicValidator
 }
 
-func NewListenerProcessor(eventBus *eventbus.EventBus[config.Dynamic], logger *logger.Logger) watcher.Processor {
+func NewListenerProcessor(eventBus *eventbus.EventBus[config.Dynamic], dynamicValidator *config.DynamicValidator, logger *logger.Logger) watcher.Processor {
 	return &ListenerProcessor{
-		eventBus:       eventBus,
-		logger:         logger,
-		listenerHashes: make(map[string]string),
+		eventBus:         eventBus,
+		logger:           logger,
+		listenerHashes:   make(map[string]string),
+		dynamicValidator: dynamicValidator,
 	}
 }
 
 // processConfig helps to send each provider config for the listener that it's specifically subscribed to.
 // Processor -> EventBus -> Listener -> Router
 func (w *ListenerProcessor) Process(dynCfg config.Dynamic) {
+	err := w.dynamicValidator.Validate(&dynCfg)
+	if err != nil {
+		w.logger.Errorf("Dynamic config validation failed: %v", err)
+		return
+	}
+
 	// Group routes by listener
 	listenerRoutes := make(map[string][]config.RouteConfig)
 	for _, route := range dynCfg.Routes {

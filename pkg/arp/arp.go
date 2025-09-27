@@ -108,7 +108,8 @@ func (a *ARP) init() error {
 		a.listeners[lc.Name] = l
 	}
 
-	listenerProcessor := listener.NewListenerProcessor(configBus, a.log.WithComponent("listener_processor"))
+	dynamicValidator := config.NewDynamicValidator()
+	listenerProcessor := listener.NewListenerProcessor(configBus, dynamicValidator, a.log.WithComponent("listener_processor"))
 	a.watcher = watcher.NewWatcher(a.config.Providers, listenerProcessor, a.log.WithComponent("watcher"))
 
 	return nil

@@ -5,13 +5,13 @@ import (
 	"strings"
 )
 
-// StaticValidationError represents a configuration validation error
-type StaticValidationError struct {
+// ValidationError represents a configuration validation error
+type ValidationError struct {
 	Field   string `json:"field,omitempty"`
 	Message string `json:"message"`
 }
 
-func (e StaticValidationError) Error() string {
+func (e ValidationError) Error() string {
 	if e.Field != "" {
 		return fmt.Sprintf("validation error: %s: %s", e.Field, e.Message)
 	}
@@ -19,18 +19,18 @@ func (e StaticValidationError) Error() string {
 }
 
 type StaticValidator struct {
-	errors []StaticValidationError
+	errors []ValidationError
 }
 
 func NewStaticValidator() *StaticValidator {
 	return &StaticValidator{
-		errors: make([]StaticValidationError, 0),
+		errors: make([]ValidationError, 0),
 	}
 }
 
 // Validate performs all validation checks on the static configuration
 func (v *StaticValidator) Validate(cfg *Static) error {
-	v.errors = make([]StaticValidationError, 0) // Reset errors
+	v.errors = make([]ValidationError, 0) // Reset errors
 
 	v.validateListeners(cfg.Listeners)
 	v.validateProviders(cfg.Providers)
@@ -136,7 +136,7 @@ func (v *StaticValidator) validateDiscoveryConfigs(discoveries []DiscoveryConfig
 }
 
 func (v *StaticValidator) addError(field, message string) {
-	v.errors = append(v.errors, StaticValidationError{
+	v.errors = append(v.errors, ValidationError{
 		Field:   field,
 		Message: message,
 	})
@@ -146,7 +146,7 @@ func (v *StaticValidator) HasErrors() bool {
 	return len(v.errors) > 0
 }
 
-func (v *StaticValidator) GetErrors() []StaticValidationError {
+func (v *StaticValidator) GetErrors() []ValidationError {
 	return v.errors
 }
 
