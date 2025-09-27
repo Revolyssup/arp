@@ -6,13 +6,20 @@ import (
 	"github.com/Revolyssup/arp/pkg/eventbus"
 )
 
+//TODO: Do I need this types.go?
+
+func RouteEventKey(listenerName string) string {
+	return "routes_" + listenerName
+}
+
+func StreamRouteEventKey(listenerName string) string {
+	return "stream_routes_" + listenerName
+}
+
 type Node struct {
 	ServiceName string
 	URL         *url.URL
 }
-
-// TODO: Refactor configs to have types
-// TODO: Add stopping mechanism
 
 type Discovery interface {
 	Start(typ string, eb *eventbus.EventBus[[]*Node], config map[string]any) error

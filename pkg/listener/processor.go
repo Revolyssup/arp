@@ -8,6 +8,7 @@ import (
 	"github.com/Revolyssup/arp/pkg/config"
 	"github.com/Revolyssup/arp/pkg/eventbus"
 	"github.com/Revolyssup/arp/pkg/logger"
+	"github.com/Revolyssup/arp/pkg/types"
 	"github.com/Revolyssup/arp/pkg/watcher"
 )
 
@@ -75,17 +76,24 @@ func (w *ListenerProcessor) Process(dynCfg config.Dynamic) {
 
 		if prevHash, exists := w.listenerHashes[listenerName]; !exists || prevHash != hash {
 			// Config has changed, publish to event bus
-			w.eventBus.Publish(listenerName, listenerConfig)
+			w.eventBus.Publish(types.RouteEventKey(listenerName), listenerConfig)
 			w.listenerHashes[listenerName] = hash
 			w.logger.Infof("Published updated config for listener: %s", listenerName)
 		}
+
+		//TODO: Push data to streamroute
+		//Group stream routes by listener
+		// listenerStreamRoutes := make(map[string][]config.StreamRouteConfig)
+		// for _, route := range dynCfg.StreamRoute {
+		// 	listenerStreamRoutes[route.Listener] = append(listenerStreamRoutes[route.Listener], route)
+		// }
 	}
 
 	// Check for listeners that have been removed
 	for listenerName := range w.listenerHashes {
 		if _, exists := listenerRoutes[listenerName]; !exists {
 			// Listener has been removed, publish empty config
-			w.eventBus.Publish(listenerName, config.Dynamic{})
+			w.eventBus.Publish(types.RouteEventKey(listenerName), config.Dynamic{})
 			delete(w.listenerHashes, listenerName)
 			w.logger.Infof("Published empty config for removed listener: %s", listenerName)
 		}

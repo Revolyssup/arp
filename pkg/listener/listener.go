@@ -11,6 +11,7 @@ import (
 	"github.com/Revolyssup/arp/pkg/logger"
 	"github.com/Revolyssup/arp/pkg/route"
 	httprouter "github.com/Revolyssup/arp/pkg/router/http"
+	"github.com/Revolyssup/arp/pkg/types"
 	"github.com/Revolyssup/arp/pkg/upstream"
 )
 
@@ -32,8 +33,11 @@ func NewListener(cfg config.ListenerConfig, discoveryManager *discovery.Discover
 		Handler: l.router,
 	}
 	go func() {
-		for dynCfg := range eventBus.Subscribe(cfg.Name) {
+		for dynCfg := range eventBus.Subscribe(types.RouteEventKey(cfg.Name)) {
 			l.updateRoutes(dynCfg.Routes, dynCfg.Upstreams, dynCfg.Plugins)
+		}
+		for dynCfg := range eventBus.Subscribe(types.StreamRouteEventKey(cfg.Name)) {
+			l.updateStreamRoutes(dynCfg.StreamRoute, dynCfg.Upstreams, dynCfg.Plugins)
 		}
 	}()
 	return l
@@ -52,6 +56,10 @@ func (l *Listener) updateRoutes(routes []config.RouteConfig, upstreams []config.
 	l.router.UpdateRoutes(routes, upstreams, plugins)
 }
 
+func (l *Listener) updateStreamRoutes(streamRoutes []config.StreamRouteConfig, upstreams []config.UpstreamConfig, plugins []config.PluginConfig) {
+	l.logger.Infof("Updating stream routes for listener %s", l.config.Name)
+	// l.router.UpdateStreamRoutes(streamRoutes, upstreams, plugins)
+}
 func (l *Listener) Stop(ctx context.Context) error {
 	return l.server.Shutdown(ctx)
 }

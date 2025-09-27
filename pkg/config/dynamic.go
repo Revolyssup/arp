@@ -3,9 +3,17 @@ package config
 import "github.com/Revolyssup/arp/pkg/plugin/types"
 
 type Dynamic struct {
-	Routes    []RouteConfig    `yaml:"routes"`
-	Upstreams []UpstreamConfig `yaml:"upstreams,omitempty"`
-	Plugins   []PluginConfig   `yaml:"plugins,omitempty"`
+	Routes      []RouteConfig       `yaml:"routes"`
+	Upstreams   []UpstreamConfig    `yaml:"upstreams,omitempty"`
+	Plugins     []PluginConfig      `yaml:"plugins,omitempty"`
+	StreamRoute []StreamRouteConfig `yaml:"streamRoutes,omitempty"`
+}
+
+type StreamRouteConfig struct {
+	Name     string          `yaml:"name"`
+	Listener string          `yaml:"listener"`
+	Plugins  []PluginConfig  `yaml:"plugins,omitempty"`
+	Upstream *UpstreamConfig `yaml:"upstream,omitempty"`
 }
 
 type RouteConfig struct {

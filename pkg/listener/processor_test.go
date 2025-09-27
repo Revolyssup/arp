@@ -8,9 +8,11 @@ import (
 	"github.com/Revolyssup/arp/pkg/config"
 	"github.com/Revolyssup/arp/pkg/eventbus"
 	"github.com/Revolyssup/arp/pkg/logger"
+	"github.com/Revolyssup/arp/pkg/types"
 	"github.com/charmbracelet/log"
 )
 
+const TIMEOUT = 2 //seconds
 func TestListenerProcessor(t *testing.T) {
 	eventBus := eventbus.NewEventBus[config.Dynamic](logger.New(log.InfoLevel))
 	processor := NewListenerProcessor(eventBus, logger.New(log.InfoLevel))
@@ -70,8 +72,8 @@ func TestListenerProcessor(t *testing.T) {
 		},
 	}
 
-	eventChan1 := eventBus.Subscribe("listener1")
-	eventChan2 := eventBus.Subscribe("listener2")
+	eventChan1 := eventBus.Subscribe(types.RouteEventKey("listener1"))
+	eventChan2 := eventBus.Subscribe(types.RouteEventKey("listener2"))
 
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -79,16 +81,32 @@ func TestListenerProcessor(t *testing.T) {
 	// Listener 1 event handler
 	go func() {
 		defer wg.Done()
-		for event := range eventChan1 {
-			recordEvent("listener1", event)
+		for {
+			select {
+			case <-time.After(TIMEOUT * time.Second): //timeout
+				return
+			case event, ok := <-eventChan1:
+				if !ok {
+					return
+				}
+				recordEvent("listener1", event)
+			}
 		}
 	}()
 
 	// Listener 2 event handler
 	go func() {
 		defer wg.Done()
-		for event := range eventChan2 {
-			recordEvent("listener2", event)
+		for {
+			select {
+			case <-time.After(TIMEOUT * time.Second): //timeout
+				return
+			case event, ok := <-eventChan2:
+				if !ok {
+					return
+				}
+				recordEvent("listener2", event)
+			}
 		}
 	}()
 
@@ -198,7 +216,7 @@ func TestListenerProcessor(t *testing.T) {
 		}
 	}
 
-	eventBus.Unsubscribe("listener1", eventChan1)
-	eventBus.Unsubscribe("listener2", eventChan2)
+	eventBus.Unsubscribe(types.RouteEventKey("listener1"), eventChan1)
+	eventBus.Unsubscribe(types.RouteEventKey("listener2"), eventChan2)
 	wg.Wait()
 }
