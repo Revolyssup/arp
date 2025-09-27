@@ -12,6 +12,10 @@ providers:
     type: file
     config:
       path: "./dynamic.yaml"
+discovery:
+  - type: demo
+    config:
+      interval: 10s
 ```
 
 ## Dynamic Configuration
@@ -21,12 +25,34 @@ routes:
   - name: route1
     listener: http
     matches:
-      - path: /
+      - path: /ip
+    upstream:
+      discovery:
+        type: demo
+    plugins:
+      - name: demo2
+  - name: route2
+    listener: http
+    matches:
+      - path: /headers
     upstream:
       name: backend1
-      nodes:
-        - url: http://httpbin.org/headers
-        - url: http://httpbin.org/ip
+    plugins:
+      - name: demo
+upstreams:
+  - name: backend1
+    nodes:
+      - url: https://httpbin.org/headers
+      # - url: http://mockbin.org/headers
+plugins:
+  - name: demo
+    type: demo
+    config:
+      message: "Hello from demo plugin!"
+  - name: demo2
+    type: demo
+    config:
+      message: "Hello from demo2 plugin!"
       
 ```
 
