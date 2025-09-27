@@ -208,5 +208,9 @@ func loadStaticConfig(filename string) (*config.Static, error) {
 		return nil, fmt.Errorf("failed to parse config YAML: %w", err)
 	}
 
+	validator := config.NewStaticValidator()
+	if err := validator.Validate(&cfg); err != nil {
+		return nil, fmt.Errorf("config validation error: %w", err)
+	}
 	return &cfg, nil
 }

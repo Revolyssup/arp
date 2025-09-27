@@ -10,7 +10,7 @@ routes:
     plugins:
       - name: demo2
   - name: route2
-    listener: http
+    listener: http2
     matches:
       - path: /headers
     upstream:
