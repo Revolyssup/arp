@@ -23,13 +23,11 @@ import (
 
 // ARP represents the main application instance
 type ARP struct {
-	config           *config.Static
-	discoveryManager *discovery.DiscoveryManager
-	configBus        *eventbus.EventBus[config.Dynamic]
-	listeners        map[string]*listener.Listener
-	watcher          *watcher.Watcher
-	cancelFunc       context.CancelFunc
-	wg               sync.WaitGroup
+	config     *config.Static
+	listeners  map[string]*listener.Listener
+	watcher    *watcher.Watcher
+	cancelFunc context.CancelFunc
+	wg         sync.WaitGroup
 }
 
 // NewARP creates a new ARP instance with the given configuration file
@@ -69,20 +67,20 @@ func (a *ARP) Run(ctx context.Context) error {
 }
 
 func (a *ARP) init() error {
-	a.configBus = eventbus.NewEventBus[config.Dynamic]()
+	configBus := eventbus.NewEventBus[config.Dynamic]()
 
-	a.discoveryManager = discovery.NewDiscoveryManager(a.config.DiscoveryConfigs)
+	discoveryManager := discovery.NewDiscoveryManager(a.config.DiscoveryConfigs)
 
 	routeFactory := route.NewFactory()
-	upstreamFactory := upstream.NewFactory(a.discoveryManager)
+	upstreamFactory := upstream.NewFactory(discoveryManager)
 
 	a.listeners = make(map[string]*listener.Listener)
 	for _, lc := range a.config.Listeners {
-		l := listener.NewListener(lc, a.discoveryManager, a.configBus, routeFactory, upstreamFactory)
+		l := listener.NewListener(lc, discoveryManager, configBus, routeFactory, upstreamFactory)
 		a.listeners[lc.Name] = l
 	}
 
-	listenerProcessor := listener.NewListenerProcessor(a.configBus)
+	listenerProcessor := listener.NewListenerProcessor(configBus)
 	a.watcher = watcher.NewWatcher(a.config.Providers, listenerProcessor)
 
 	return nil
