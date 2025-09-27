@@ -37,8 +37,7 @@ func NewUpstream(upsConf config.UpstreamConfig, discoveryManager *discovery.Disc
 			return nil, fmt.Errorf("invalid node URL %s: %v", nodeConfig.URL, err)
 		}
 		u.nodes = append(u.nodes, &types.Node{
-			URL:    parsedURL,
-			Weight: nodeConfig.Weight,
+			URL: parsedURL,
 		})
 	}
 

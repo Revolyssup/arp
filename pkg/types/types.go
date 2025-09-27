@@ -9,7 +9,6 @@ import (
 type Node struct {
 	ServiceName string
 	URL         *url.URL
-	Weight      int
 }
 
 // TODO: Refactor configs to have types

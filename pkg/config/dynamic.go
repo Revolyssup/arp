@@ -31,8 +31,7 @@ type UpstreamConfig struct {
 }
 
 type Node struct {
-	URL    string `yaml:"url"`
-	Weight int    `yaml:"weight,omitempty"`
+	URL string `yaml:"url"`
 }
 
 type DiscoveryRef struct {

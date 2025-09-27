@@ -26,12 +26,10 @@ func (d *DemoDiscovery) Start(name string, eb *eventbus.EventBus[[]*types.Node],
 	// For demo purposes, we will just publish a static list of nodes every 10 seconds.
 	nodes := []*types.Node{
 		{
-			URL:    &url.URL{Scheme: "http", Host: "httpbin.org", Path: "/headers"},
-			Weight: 1,
+			URL: &url.URL{Scheme: "http", Host: "httpbin.org", Path: "/headers"},
 		},
 		{
-			URL:    &url.URL{Scheme: "http", Host: "httpbin.org", Path: "/ip"},
-			Weight: 1,
+			URL: &url.URL{Scheme: "http", Host: "httpbin.org", Path: "/ip"},
 		},
 	}
 	t := 10 * time.Second
