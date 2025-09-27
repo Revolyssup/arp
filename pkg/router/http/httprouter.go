@@ -3,9 +3,8 @@ package router
 import (
 	"net/http"
 
-	"log"
-
 	"github.com/Revolyssup/arp/pkg/config"
+	"github.com/Revolyssup/arp/pkg/logger"
 	"github.com/Revolyssup/arp/pkg/plugin"
 	"github.com/Revolyssup/arp/pkg/proxy"
 	route "github.com/Revolyssup/arp/pkg/route"
@@ -16,12 +15,14 @@ type Router struct {
 	routes          []*route.Route
 	routerFactory   *route.Factory
 	upstreamFactory *upstream.Factory
+	logger          *logger.Logger
 }
 
-func NewRouter(listener string, routerFactory *route.Factory, upstreamFactory *upstream.Factory) *Router {
+func NewRouter(listener string, routerFactory *route.Factory, upstreamFactory *upstream.Factory, parentLogger *logger.Logger) *Router {
 	return &Router{
 		routerFactory:   routerFactory,
 		upstreamFactory: upstreamFactory,
+		logger:          parentLogger.WithComponent("router"),
 	}
 }
 
@@ -59,11 +60,11 @@ func (r *Router) UpdateRoutes(routeConfigs []config.RouteConfig, upstreamConfigs
 			}
 			if pluginFactory, exists := plugin.Registry.Get(pCfg.Type); exists {
 				plugin := pluginFactory()
-				log.Printf("Adding plugin %s to route %s", pCfg.Name, rc.Name)
+				r.logger.Infof("Adding plugin %s to route %s", pCfg.Name, rc.Name)
 				plugin.SetConfig(pCfg.Config)
 				pluginChain.Add(plugin)
 			} else {
-				log.Printf("Plugin type %s not found for plugin %s in route %s", pCfg.Type, pCfg.Name, rc.Name)
+				r.logger.Warnf("Plugin type %s not found for plugin %s in route %s", pCfg.Type, pCfg.Name, rc.Name)
 			}
 		}
 		route := r.routerFactory.NewRoute(rc.Matches, pluginChain, up)

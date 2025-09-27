@@ -3,52 +3,52 @@ package file
 import (
 	"crypto/md5"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 
 	"github.com/Revolyssup/arp/pkg/config"
+	"github.com/Revolyssup/arp/pkg/logger"
 	"github.com/fsnotify/fsnotify"
 	"gopkg.in/yaml.v3"
 )
 
 type FileProvider struct {
 	config   config.ProviderConfig
+	logger   *logger.Logger
 	filePath string
 	lastHash string
 }
 
-func NewFileProvider(cfg config.ProviderConfig) *FileProvider {
+func NewFileProvider(cfg config.ProviderConfig, logger *logger.Logger) (*FileProvider, error) {
 	filePath, ok := cfg.Config["path"].(string)
 	if !ok {
-		log.Printf("File provider missing 'path' configuration")
-		return nil
+		return nil, fmt.Errorf("missing 'path' configuration")
 	}
 
 	absPath, err := filepath.Abs(filePath)
 	if err != nil {
-		log.Printf("Failed to resolve absolute path: %v", err)
-		return nil
+		return nil, fmt.Errorf("failed to get absolute path: %w", err)
 	}
 
 	return &FileProvider{
 		config:   cfg,
 		filePath: absPath,
-	}
+		logger:   logger.WithComponent("file_provider"),
+	}, nil
 }
 
 func (fp *FileProvider) Provide(ch chan<- config.Dynamic) {
 	// Create new watcher
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
-		log.Printf("Failed to create file watcher: %v", err)
+		fp.logger.Errorf("Failed to create file watcher: %v", err)
 		return
 	}
 	defer watcher.Close()
 
 	err = watcher.Add(fp.filePath)
 	if err != nil {
-		log.Printf("Failed to watch file: %v", err)
+		fp.logger.Errorf("Failed to watch file: %v", err)
 		return
 	}
 
@@ -56,15 +56,15 @@ func (fp *FileProvider) Provide(ch chan<- config.Dynamic) {
 	dir := filepath.Dir(fp.filePath)
 	err = watcher.Add(dir)
 	if err != nil {
-		log.Printf("Failed to watch directory: %v", err)
+		fp.logger.Errorf("Failed to watch directory: %v", err)
 	}
 
 	// Initial read
 	if err := fp.readAndSendConfig(ch); err != nil {
-		log.Printf("Failed to read initial config: %v", err)
+		fp.logger.Errorf("Failed to read initial config: %v", err)
 	}
 
-	log.Printf("File provider watching: %s", fp.filePath)
+	fp.logger.Debugf("file provider watching: %s", fp.filePath)
 
 	for {
 		select {
@@ -78,7 +78,7 @@ func (fp *FileProvider) Provide(ch chan<- config.Dynamic) {
 				if event.Op&fsnotify.Write == fsnotify.Write {
 					// File was modified
 					if err := fp.readAndSendConfig(ch); err != nil {
-						log.Printf("Failed to read config: %v", err)
+						fp.logger.Errorf("Failed to read config: %v", err)
 					}
 				} else if event.Op&fsnotify.Remove == fsnotify.Remove || event.Op&fsnotify.Rename == fsnotify.Rename {
 					// File was removed or renamed - try to re-add watch when it reappears
@@ -88,7 +88,7 @@ func (fp *FileProvider) Provide(ch chan<- config.Dynamic) {
 				// File was created (after being removed)
 				watcher.Add(fp.filePath)
 				if err := fp.readAndSendConfig(ch); err != nil {
-					log.Printf("Failed to read config: %v", err)
+					fp.logger.Errorf("Failed to read config: %v", err)
 				}
 			}
 
@@ -96,7 +96,7 @@ func (fp *FileProvider) Provide(ch chan<- config.Dynamic) {
 			if !ok {
 				return
 			}
-			log.Printf("File watcher error: %v", err)
+			fp.logger.Errorf("File watcher error: %v", err)
 		}
 	}
 }
@@ -125,10 +125,10 @@ func (fp *FileProvider) readAndSendConfig(ch chan<- config.Dynamic) error {
 	select {
 	case ch <- dynamicConfig:
 	default:
-		log.Printf("Warning: Config channel is full, dropping update")
+		fp.logger.Warnf("Warning: Config channel is full, dropping update")
 	}
 
 	fp.lastHash = contentHash
-	log.Printf("File provider sent updated configuration")
+	fp.logger.Warnf("file provider sent updated configuration")
 	return nil
 }

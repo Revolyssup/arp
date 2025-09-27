@@ -4,6 +4,7 @@ type Static struct {
 	Listeners        []ListenerConfig  `yaml:"listeners"`
 	Providers        []ProviderConfig  `yaml:"providers"`
 	DiscoveryConfigs []DiscoveryConfig `yaml:"discovery"`
+	LogLevel         string            `yaml:"log_level"`
 }
 
 type ListenerConfig struct {

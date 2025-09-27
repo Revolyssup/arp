@@ -2,9 +2,9 @@ package watcher
 
 import (
 	"context"
-	"log"
 
 	"github.com/Revolyssup/arp/pkg/config"
+	"github.com/Revolyssup/arp/pkg/logger"
 	"github.com/Revolyssup/arp/pkg/provider"
 	"github.com/Revolyssup/arp/pkg/provider/file"
 )
@@ -19,9 +19,10 @@ type Watcher struct {
 	receiveChan chan config.Dynamic
 	applyChan   chan config.Dynamic
 	Processor   Processor
+	logger      *logger.Logger
 }
 
-func NewWatcher(providers []config.ProviderConfig, processor Processor) *Watcher {
+func NewWatcher(providers []config.ProviderConfig, processor Processor, logger *logger.Logger) *Watcher {
 	if len(providers) == 0 {
 		return nil
 	}
@@ -29,14 +30,20 @@ func NewWatcher(providers []config.ProviderConfig, processor Processor) *Watcher
 		receiveChan: make(chan config.Dynamic, 10), // Buffered channel
 		applyChan:   make(chan config.Dynamic, 10), // Buffered channel
 		Processor:   processor,
+		logger:      logger.WithComponent("watcher"),
 	}
 	for _, pCfg := range providers {
 		var p provider.Provider
+		var err error
 		switch pCfg.Type {
 		case "file":
-			p = file.NewFileProvider(pCfg)
+			p, err = file.NewFileProvider(pCfg, logger)
 		default:
 			continue // Unsupported provider type
+		}
+		if err != nil {
+			logger.Errorf("Failed to create provider for %s: %v", pCfg.Name, err)
+			continue
 		}
 		go p.Provide(watcher.receiveChan)
 	}
@@ -55,14 +62,14 @@ func (w *Watcher) Watch(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("Watcher received shutdown signal")
+			w.logger.Warn("Watcher received shutdown signal")
 			return
 		case output <- latestConfiguration:
 			output = nil
 		default:
 			select {
 			case <-ctx.Done():
-				log.Println("Watcher received shutdown signal")
+				w.logger.Warn("Watcher received shutdown signal")
 				return
 			case dynCfg := <-w.receiveChan:
 				latestConfiguration = dynCfg

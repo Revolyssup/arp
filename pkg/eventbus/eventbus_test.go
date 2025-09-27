@@ -3,10 +3,13 @@ package eventbus
 import (
 	"sync"
 	"testing"
+
+	"github.com/Revolyssup/arp/pkg/logger"
+	"github.com/charmbracelet/log"
 )
 
 func TestEventBus(t *testing.T) {
-	bus := NewEventBus[string]()
+	bus := NewEventBus[string](logger.New(log.InfoLevel))
 
 	topic := "test_topic"
 	subscriber := bus.Subscribe(topic)
@@ -27,7 +30,7 @@ func TestEventBus(t *testing.T) {
 }
 
 func TestMultipleSubscribers(t *testing.T) {
-	bus := NewEventBus[int]()
+	bus := NewEventBus[int](logger.New(log.InfoLevel))
 
 	topic := "numbers"
 	subscriber1 := bus.Subscribe(topic)
@@ -58,7 +61,7 @@ func TestMultipleSubscribers(t *testing.T) {
 
 // Subscribers should get the last published event immediately after subscribing.
 func TestSubscribersComeAfterPublishers(t *testing.T) {
-	bus := NewEventBus[string]()
+	bus := NewEventBus[string](logger.New(log.InfoLevel))
 
 	topic := "late_topic"
 	bus.Publish(topic, "cached_message")
@@ -73,7 +76,7 @@ func TestSubscribersComeAfterPublishers(t *testing.T) {
 }
 
 func TestUnsubscribe(t *testing.T) {
-	bus := NewEventBus[string]()
+	bus := NewEventBus[string](logger.New(log.InfoLevel))
 
 	topic := "unsub_topic"
 	subscriber := bus.Subscribe(topic)

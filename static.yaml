@@ -11,3 +11,4 @@ discovery:
   - type: demo
     config:
       interval: 10s
+log_level: debug

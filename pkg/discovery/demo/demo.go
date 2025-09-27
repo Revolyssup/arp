@@ -1,28 +1,30 @@
 package demo
 
 import (
-	"log"
 	"net/url"
 	"time"
 
 	"github.com/Revolyssup/arp/pkg/eventbus"
+	"github.com/Revolyssup/arp/pkg/logger"
 	"github.com/Revolyssup/arp/pkg/types"
 )
 
-func New(cfg map[string]any) types.Discovery {
+func New(cfg map[string]any, log *logger.Logger) types.Discovery {
 	return &DemoDiscovery{
-		eb:  eventbus.NewEventBus[[]*types.Node](),
+		eb:  eventbus.NewEventBus[[]*types.Node](log.WithComponent("demo_discovery")),
 		cfg: cfg,
+		log: log.WithComponent("demo_discovery"),
 	}
 }
 
 type DemoDiscovery struct {
 	eb  *eventbus.EventBus[[]*types.Node]
 	cfg map[string]any
+	log *logger.Logger
 }
 
 func (d *DemoDiscovery) Start(name string, eb *eventbus.EventBus[[]*types.Node], cfg map[string]any) error {
-	log.Printf("Starting demo discovery with config: %v", cfg)
+	d.log.Infof("Starting demo discovery with config: %v", cfg)
 	// For demo purposes, we will just publish a static list of nodes every 10 seconds.
 	nodes := []*types.Node{
 		{
@@ -41,7 +43,7 @@ func (d *DemoDiscovery) Start(name string, eb *eventbus.EventBus[[]*types.Node],
 	go func() {
 		//simulating pushing different nodes every interval
 		for i := 0; ; i++ {
-			log.Printf("Publishing nodes for demo discovery: %v for name %s", nodes[i%len(nodes)], name)
+			d.log.Debugf("Publishing nodes for demo discovery: %v for name %s", nodes[i%len(nodes)], name)
 			eb.Publish(name, []*types.Node{nodes[i%len(nodes)]})
 			time.Sleep(t)
 		}

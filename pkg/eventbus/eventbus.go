@@ -1,8 +1,9 @@
 package eventbus
 
 import (
-	"log"
 	"sync"
+
+	"github.com/Revolyssup/arp/pkg/logger"
 )
 
 /*
@@ -14,12 +15,14 @@ type EventBus[T any] struct {
 	subscribers map[string][]chan T
 	cache       map[string]T // Cache for last published value per topic
 	mx          sync.RWMutex
+	log         *logger.Logger
 }
 
-func NewEventBus[T any]() *EventBus[T] {
+func NewEventBus[T any](parentLogger *logger.Logger) *EventBus[T] {
 	return &EventBus[T]{
 		subscribers: make(map[string][]chan T),
 		cache:       make(map[string]T),
+		log:         parentLogger.WithComponent("eventbus"),
 	}
 }
 
@@ -72,7 +75,7 @@ func (eb *EventBus[T]) Publish(topic string, data T) {
 			// Successfully sent
 		default:
 			// Channel is full, log warning but don't block
-			log.Printf("WARNING: Channel full for topic %s, dropping message", topic)
+			eb.log.Infof("WARNING: Channel full for topic %s, dropping message", topic)
 		}
 	}
 }

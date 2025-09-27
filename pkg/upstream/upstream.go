@@ -63,7 +63,6 @@ func newUpstream(upsConf config.UpstreamConfig, discoveryManager *discovery.Disc
 		}
 		go func() {
 			for nodes := range nodesEvent {
-				fmt.Println("Discovered nodes:", nodes)
 				u.updateNodes(nodes)
 			}
 		}()

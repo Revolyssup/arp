@@ -4,21 +4,23 @@ import (
 	"crypto/md5"
 	"encoding/json"
 	"fmt"
-	"log"
 
 	"github.com/Revolyssup/arp/pkg/config"
 	"github.com/Revolyssup/arp/pkg/eventbus"
+	"github.com/Revolyssup/arp/pkg/logger"
 	"github.com/Revolyssup/arp/pkg/watcher"
 )
 
 type ListenerProcessor struct {
 	eventBus       *eventbus.EventBus[config.Dynamic]
 	listenerHashes map[string]string // Maps listener name to config hash
+	logger         *logger.Logger
 }
 
-func NewListenerProcessor(eventBus *eventbus.EventBus[config.Dynamic]) watcher.Processor {
+func NewListenerProcessor(eventBus *eventbus.EventBus[config.Dynamic], logger *logger.Logger) watcher.Processor {
 	return &ListenerProcessor{
 		eventBus:       eventBus,
+		logger:         logger,
 		listenerHashes: make(map[string]string),
 	}
 }
@@ -67,7 +69,7 @@ func (w *ListenerProcessor) Process(dynCfg config.Dynamic) {
 		}
 		hash, err := w.calculateHash(listenerConfig)
 		if err != nil {
-			log.Printf("Error calculating hash for listener %s: %v", listenerName, err)
+			w.logger.Errorf("Error calculating hash for listener %s: %v", listenerName, err)
 			continue
 		}
 
@@ -75,7 +77,7 @@ func (w *ListenerProcessor) Process(dynCfg config.Dynamic) {
 			// Config has changed, publish to event bus
 			w.eventBus.Publish(listenerName, listenerConfig)
 			w.listenerHashes[listenerName] = hash
-			log.Printf("Published updated config for listener: %s", listenerName)
+			w.logger.Infof("Published updated config for listener: %s", listenerName)
 		}
 	}
 
@@ -85,7 +87,7 @@ func (w *ListenerProcessor) Process(dynCfg config.Dynamic) {
 			// Listener has been removed, publish empty config
 			w.eventBus.Publish(listenerName, config.Dynamic{})
 			delete(w.listenerHashes, listenerName)
-			log.Printf("Published empty config for removed listener: %s", listenerName)
+			w.logger.Infof("Published empty config for removed listener: %s", listenerName)
 		}
 	}
 }

@@ -3,12 +3,12 @@ package listener
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 
 	"github.com/Revolyssup/arp/pkg/config"
 	"github.com/Revolyssup/arp/pkg/discovery"
 	"github.com/Revolyssup/arp/pkg/eventbus"
+	"github.com/Revolyssup/arp/pkg/logger"
 	"github.com/Revolyssup/arp/pkg/route"
 	httprouter "github.com/Revolyssup/arp/pkg/router/http"
 	"github.com/Revolyssup/arp/pkg/upstream"
@@ -18,12 +18,14 @@ type Listener struct {
 	config config.ListenerConfig
 	router *httprouter.Router
 	server *http.Server
+	logger *logger.Logger
 }
 
-func NewListener(cfg config.ListenerConfig, discoveryManager *discovery.DiscoveryManager, eventBus *eventbus.EventBus[config.Dynamic], routerFactory *route.Factory, upstreamFactory *upstream.Factory) *Listener {
+func NewListener(cfg config.ListenerConfig, discoveryManager *discovery.DiscoveryManager, eventBus *eventbus.EventBus[config.Dynamic], routerFactory *route.Factory, upstreamFactory *upstream.Factory, logger *logger.Logger) *Listener {
 	l := &Listener{
 		config: cfg,
-		router: httprouter.NewRouter(cfg.Name, routerFactory, upstreamFactory),
+		router: httprouter.NewRouter(cfg.Name, routerFactory, upstreamFactory, logger),
+		logger: logger,
 	}
 	l.server = &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.Port),
@@ -46,7 +48,7 @@ func (l *Listener) Start() error {
 
 // TODO: Refactor the updation logic from this ugly mess of passing each config type separately.
 func (l *Listener) updateRoutes(routes []config.RouteConfig, upstreams []config.UpstreamConfig, plugins []config.PluginConfig) {
-	log.Print("Updating routes for listener ", l.config.Name)
+	l.logger.Infof("Updating routes for listener %s", l.config.Name)
 	l.router.UpdateRoutes(routes, upstreams, plugins)
 }
 

@@ -6,16 +6,17 @@ import (
 
 	"github.com/Revolyssup/arp/pkg/config"
 	"github.com/Revolyssup/arp/pkg/discovery"
+	"github.com/Revolyssup/arp/pkg/logger"
 )
 
-var discoveryManager = discovery.NewDiscoveryManager([]config.DiscoveryConfig{
+var discoveryManager, _ = discovery.NewDiscoveryManager([]config.DiscoveryConfig{
 	{
 		Type: "demo",
 		Config: map[string]any{
 			"interval": "1s",
 		},
 	},
-})
+}, logger.New(logger.LevelInfo))
 
 func TestUpstream(t *testing.T) {
 

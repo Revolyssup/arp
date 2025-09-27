@@ -7,11 +7,13 @@ import (
 
 	"github.com/Revolyssup/arp/pkg/config"
 	"github.com/Revolyssup/arp/pkg/eventbus"
+	"github.com/Revolyssup/arp/pkg/logger"
+	"github.com/charmbracelet/log"
 )
 
 func TestListenerProcessor(t *testing.T) {
-	eventBus := eventbus.NewEventBus[config.Dynamic]()
-	processor := NewListenerProcessor(eventBus)
+	eventBus := eventbus.NewEventBus[config.Dynamic](logger.New(log.InfoLevel))
+	processor := NewListenerProcessor(eventBus, logger.New(log.InfoLevel))
 
 	type eventCollector struct {
 		mu     sync.RWMutex

@@ -3,7 +3,6 @@ package arp
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -15,15 +14,38 @@ import (
 	"github.com/Revolyssup/arp/pkg/discovery"
 	"github.com/Revolyssup/arp/pkg/eventbus"
 	"github.com/Revolyssup/arp/pkg/listener"
+	"github.com/Revolyssup/arp/pkg/logger"
 	"github.com/Revolyssup/arp/pkg/route"
 	"github.com/Revolyssup/arp/pkg/upstream"
 	"github.com/Revolyssup/arp/pkg/watcher"
 	"gopkg.in/yaml.v3"
 )
 
+// ASCII Art for ARP banner
+const arpBanner = `
+    █████╗ ██████╗ ██████╗ 
+   ██╔══██╗██╔══██╗██╔══██╗
+   ███████║██████╔╝██████╔╝
+   ██╔══██║██╔══██╗██╔═══╝ 
+   ██║  ██║██║  ██║██║     
+   ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝      
+
+ Another Reverse Proxy
+         starting...
+`
+
+func printBanner() {
+	// Print directly to stdout to avoid logger prefixes for the banner
+	fmt.Print("\033[1;36m") // Cyan color
+	fmt.Print(arpBanner)
+	fmt.Print("\033[0m") // Reset color
+	fmt.Println()
+}
+
 // ARP represents the main application instance
 type ARP struct {
 	config     *config.Static
+	log        *logger.Logger
 	listeners  map[string]*listener.Listener
 	watcher    *watcher.Watcher
 	cancelFunc context.CancelFunc
@@ -36,13 +58,17 @@ func NewARP(configFile string) (*ARP, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to load config: %w", err)
 	}
+	level := logger.SetLogLevel(staticConfig.LogLevel)
+	log := logger.New(level).WithComponent("arp")
 
 	return &ARP{
 		config: staticConfig,
+		log:    log,
 	}, nil
 }
 
 func (a *ARP) Run(ctx context.Context) error {
+	printBanner()
 	ctx, cancel := context.WithCancel(ctx)
 	a.cancelFunc = cancel
 
@@ -55,7 +81,7 @@ func (a *ARP) Run(ctx context.Context) error {
 		return fmt.Errorf("failed to start components: %w", err)
 	}
 
-	log.Printf("ARP server started successfully with %d listeners", len(a.listeners))
+	a.log.Infof("ARP server started successfully with %d listeners", len(a.listeners))
 
 	// Wait for shutdown signal
 	a.waitForShutdown(ctx)
@@ -67,21 +93,23 @@ func (a *ARP) Run(ctx context.Context) error {
 }
 
 func (a *ARP) init() error {
-	configBus := eventbus.NewEventBus[config.Dynamic]()
+	configBus := eventbus.NewEventBus[config.Dynamic](a.log.WithComponent("config_bus"))
 
-	discoveryManager := discovery.NewDiscoveryManager(a.config.DiscoveryConfigs)
-
+	discoveryManager, err := discovery.NewDiscoveryManager(a.config.DiscoveryConfigs, a.log)
+	if err != nil {
+		return fmt.Errorf("failed to initialize discovery manager: %w", err)
+	}
 	routeFactory := route.NewFactory()
 	upstreamFactory := upstream.NewFactory(discoveryManager)
 
 	a.listeners = make(map[string]*listener.Listener)
 	for _, lc := range a.config.Listeners {
-		l := listener.NewListener(lc, discoveryManager, configBus, routeFactory, upstreamFactory)
+		l := listener.NewListener(lc, discoveryManager, configBus, routeFactory, upstreamFactory, a.log.WithComponent("listener_"+lc.Name))
 		a.listeners[lc.Name] = l
 	}
 
-	listenerProcessor := listener.NewListenerProcessor(configBus)
-	a.watcher = watcher.NewWatcher(a.config.Providers, listenerProcessor)
+	listenerProcessor := listener.NewListenerProcessor(configBus, a.log.WithComponent("listener_processor"))
+	a.watcher = watcher.NewWatcher(a.config.Providers, listenerProcessor, a.log.WithComponent("watcher"))
 
 	return nil
 }
@@ -92,7 +120,7 @@ func (a *ARP) start(ctx context.Context) error {
 	go func() {
 		defer a.wg.Done()
 		a.watcher.Watch(ctx)
-		log.Println("Configuration watcher stopped")
+		a.log.Info("Configuration watcher stopped")
 	}()
 
 	// Start listeners
@@ -100,12 +128,12 @@ func (a *ARP) start(ctx context.Context) error {
 		a.wg.Add(1)
 		go func(name string, l *listener.Listener) {
 			defer a.wg.Done()
-			log.Printf("Starting listener: %s", name)
+			a.log.Infof("Starting listener: %s", name)
 
 			if err := l.Start(); err != nil && err != http.ErrServerClosed {
-				log.Printf("Listener %s failed: %v", name, err)
+				a.log.Errorf("Listener %s failed: %v", name, err)
 			} else {
-				log.Printf("Listener %s stopped", name)
+				a.log.Infof("Listener %s stopped", name)
 			}
 		}(name, l)
 	}
@@ -120,15 +148,15 @@ func (a *ARP) waitForShutdown(ctx context.Context) {
 
 	select {
 	case sig := <-sigChan:
-		log.Printf("Received signal: %v", sig)
+		a.log.Infof("Received signal: %v", sig)
 	case <-ctx.Done():
-		log.Printf("Context cancelled: %v", ctx.Err())
+		a.log.Infof("Context cancelled: %v", ctx.Err())
 	}
 }
 
 // shutdown performs graceful shutdown of all components
 func (a *ARP) shutdown() {
-	log.Println("Initiating graceful shutdown...")
+	a.log.Info("Initiating graceful shutdown...")
 
 	// Cancel the main context to signal all components to stop
 	if a.cancelFunc != nil {
@@ -144,9 +172,9 @@ func (a *ARP) shutdown() {
 		wg.Add(1)
 		go func(name string, l *listener.Listener) {
 			defer wg.Done()
-			log.Printf("Stopping listener: %s", name)
+			a.log.Infof("Stopping listener: %s", name)
 			if err := l.Stop(shutdownCtx); err != nil {
-				log.Printf("Error stopping listener %s: %v", name, err)
+				a.log.Errorf("Error stopping listener %s: %v", name, err)
 			}
 		}(name, l)
 	}
@@ -162,9 +190,9 @@ func (a *ARP) shutdown() {
 	// Wait for shutdown to complete or timeout
 	select {
 	case <-done:
-		log.Println("Shutdown completed successfully")
+		a.log.Info("Shutdown completed successfully")
 	case <-shutdownCtx.Done():
-		log.Println("Shutdown timeout exceeded, forcing exit")
+		a.log.Warn("Shutdown timeout exceeded, forcing exit")
 	}
 }
 
