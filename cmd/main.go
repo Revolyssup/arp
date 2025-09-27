@@ -1,77 +1,49 @@
 package main
 
 import (
-	"context"
-	"log"
+	"fmt"
 	"os"
-	"os/signal"
-	"syscall"
 
-	"github.com/Revolyssup/arp/pkg/config"
-	"github.com/Revolyssup/arp/pkg/discovery"
-	"github.com/Revolyssup/arp/pkg/eventbus"
-	"github.com/Revolyssup/arp/pkg/listener"
-	"github.com/Revolyssup/arp/pkg/watcher"
-	"gopkg.in/yaml.v3"
+	"github.com/Revolyssup/arp/pkg/arp"
+	"github.com/spf13/cobra"
 )
 
-var filename = "./static.yaml"
+var configFile string
 
-func init() {
-	configPath := os.Getenv("ARP_CONFIG")
-	if configPath != "" {
-		filename = configPath
-	}
-}
 func main() {
-	staticConfig, err := loadStaticConfig(filename)
-	if err != nil {
-		log.Fatal("Failed to load config:", err)
-	}
-
-	configBus := eventbus.NewEventBus[config.Dynamic]()
-
-	discoveryManager := discovery.NewDiscoveryManager(staticConfig.DiscoveryConfigs)
-	listeners := make(map[string]*listener.Listener)
-	for _, lc := range staticConfig.Listeners {
-		l := listener.NewListener(lc, discoveryManager, configBus)
-		listeners[lc.Name] = l
-	}
-
-	listenerProcessor := listener.NewListenerProcessor(configBus)
-	cfgWatcher := watcher.NewWatcher(staticConfig.Providers, listenerProcessor)
-	ctx, cancel := context.WithCancel(context.Background())
-	go cfgWatcher.Watch(ctx)
-
-	for name, l := range listeners {
-		go func(name string, l *listener.Listener) {
-			if err := l.Start(); err != nil {
-				log.Printf("Listener %s failed: %v", name, err)
-			}
-		}(name, l)
-	}
-
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	<-sigChan
-
-	log.Println("Shutting down...")
-	cancel()
-	for _, l := range listeners {
-		l.Stop()
+	cmd := newARPCommand()
+	if err := cmd.Execute(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
 	}
 }
 
-func loadStaticConfig(filename string) (*config.Static, error) {
-	data, err := os.ReadFile(filename)
+func newARPCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "arp",
+		Short: "ARP - Another Reverse Proxy",
+		Long: `ARP is a dynamic reverse proxy with service discovery 
+and plugin support for advanced routing capabilities.`,
+		RunE: runARP,
+	}
+
+	cmd.Flags().StringVarP(&configFile, "config", "c", "./static.yaml", "Path to configuration file")
+
+	// Set default from environment variable
+	if envConfig := os.Getenv("ARP_CONFIG"); envConfig != "" {
+		configFile = envConfig
+	}
+
+	return cmd
+}
+
+func runARP(cmd *cobra.Command, args []string) error {
+	ctx := cmd.Context()
+
+	app, err := arp.NewARP(configFile)
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("failed to initialize ARP: %w", err)
 	}
 
-	var cfg config.Static
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, err
-	}
-
-	return &cfg, nil
+	return app.Run(ctx)
 }

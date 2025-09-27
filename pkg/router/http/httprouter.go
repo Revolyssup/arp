@@ -6,33 +6,27 @@ import (
 	"log"
 
 	"github.com/Revolyssup/arp/pkg/config"
-	"github.com/Revolyssup/arp/pkg/discovery"
 	"github.com/Revolyssup/arp/pkg/plugin"
 	"github.com/Revolyssup/arp/pkg/proxy"
+	route "github.com/Revolyssup/arp/pkg/route"
 	"github.com/Revolyssup/arp/pkg/upstream"
 )
 
-type HTTPRouter struct {
-	routes           []*Route
-	listener         string
-	discoveryManager *discovery.DiscoveryManager
+type Router struct {
+	routes          []*route.Route
+	routerFactory   *route.Factory
+	upstreamFactory *upstream.Factory
 }
 
-type Route struct {
-	matcher  Matcher
-	plugins  *plugin.Chain
-	upstream *upstream.Upstream
-}
-
-func NewHTTPRouter(listener string, discoveryManager *discovery.DiscoveryManager) *HTTPRouter {
-	return &HTTPRouter{
-		listener:         listener,
-		discoveryManager: discoveryManager,
+func NewRouter(listener string, routerFactory *route.Factory, upstreamFactory *upstream.Factory) *Router {
+	return &Router{
+		routerFactory:   routerFactory,
+		upstreamFactory: upstreamFactory,
 	}
 }
 
-func (r *HTTPRouter) UpdateRoutes(routeConfigs []config.RouteConfig, upstreamConfigs []config.UpstreamConfig, pluginConfigs []config.PluginConfig) error {
-	var newRoutes []*Route
+func (r *Router) UpdateRoutes(routeConfigs []config.RouteConfig, upstreamConfigs []config.UpstreamConfig, pluginConfigs []config.PluginConfig) error {
+	var newRoutes []*route.Route
 	upstreamMap := make(map[string]config.UpstreamConfig)
 	for _, up := range upstreamConfigs {
 		upstreamMap[up.Name] = up
@@ -43,14 +37,6 @@ func (r *HTTPRouter) UpdateRoutes(routeConfigs []config.RouteConfig, upstreamCon
 		pluginMap[p.Name] = &p
 	}
 	for _, rc := range routeConfigs {
-		if rc.Listener != r.listener {
-			continue // Skip routes not meant for this listener
-		}
-		matcher, err := NewCompositeMatcher(rc.Matches)
-		if err != nil {
-			return err
-		}
-
 		upstreamConfig := rc.Upstream
 		if upstreamConfig == nil {
 			continue // Skip routes with missing upstreams
@@ -60,7 +46,7 @@ func (r *HTTPRouter) UpdateRoutes(routeConfigs []config.RouteConfig, upstreamCon
 			upstreamConfig = &up
 		}
 		// Create upstream
-		up, err := upstream.NewUpstream(*upstreamConfig, r.discoveryManager)
+		up, err := r.upstreamFactory.NewUpstream(*upstreamConfig)
 		if err != nil {
 			return err
 		}
@@ -80,11 +66,8 @@ func (r *HTTPRouter) UpdateRoutes(routeConfigs []config.RouteConfig, upstreamCon
 				log.Printf("Plugin type %s not found for plugin %s in route %s", pCfg.Type, pCfg.Name, rc.Name)
 			}
 		}
-		newRoutes = append(newRoutes, &Route{
-			matcher:  matcher,
-			plugins:  pluginChain,
-			upstream: up,
-		})
+		route := r.routerFactory.NewRoute(rc.Matches, pluginChain, up)
+		newRoutes = append(newRoutes, route)
 	}
 
 	r.routes = newRoutes
@@ -93,21 +76,21 @@ func (r *HTTPRouter) UpdateRoutes(routeConfigs []config.RouteConfig, upstreamCon
 
 // It might be expensive to run each matcher when there are thousands of routes.
 // TODO: Optimise route matching
-func (r *HTTPRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	for _, route := range r.routes {
-		if route.matcher.Match(req) {
-			if err := route.plugins.HandleRequest(req); err != nil {
+		if route.Matcher.Match(req) {
+			if err := route.Plugins.HandleRequest(req); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
 
 			// Get upstream node
-			node := route.upstream.SelectNode()
+			node := route.Upstream.SelectNode()
 			if node == nil {
 				http.Error(w, "No available upstream nodes", http.StatusServiceUnavailable)
 				return
 			}
-			wrappedWriter := route.plugins.WrapResponseWriter(w)
+			wrappedWriter := route.Plugins.WrapResponseWriter(w)
 			proxy := proxy.NewReverseProxy()
 			proxy.ServeHTTP(wrappedWriter, req, node.URL)
 			return

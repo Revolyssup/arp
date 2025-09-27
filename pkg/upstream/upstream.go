@@ -21,8 +21,22 @@ type Upstream struct {
 	currentIndex int
 }
 
+type Factory struct {
+	discoveryManager *discovery.DiscoveryManager
+}
+
+func NewFactory(discoveryManager *discovery.DiscoveryManager) *Factory {
+	return &Factory{
+		discoveryManager: discoveryManager,
+	}
+}
+
+func (f *Factory) NewUpstream(upsConf config.UpstreamConfig) (*Upstream, error) {
+	return newUpstream(upsConf, f.discoveryManager)
+}
+
 // TODO: Implement garbage collection for upstream related nodeevents and healthcheck
-func NewUpstream(upsConf config.UpstreamConfig, discoveryManager *discovery.DiscoveryManager) (*Upstream, error) {
+func newUpstream(upsConf config.UpstreamConfig, discoveryManager *discovery.DiscoveryManager) (*Upstream, error) {
 	u := &Upstream{
 		name:   upsConf.Name,
 		lbType: upsConf.Type,
@@ -42,13 +56,14 @@ func NewUpstream(upsConf config.UpstreamConfig, discoveryManager *discovery.Disc
 	}
 
 	// Initialize service discovery if configured
-	if upsConf.Discovery.Type != "" {
-		nodesEvent, err := discoveryManager.NewDiscovery(upsConf.Discovery)
+	if upsConf.Discovery.Type != "" && discoveryManager != nil {
+		nodesEvent, err := discoveryManager.GetDiscovery(upsConf.Discovery)
 		if err != nil {
 			return nil, fmt.Errorf("failed to initialize discovery: %v", err)
 		}
 		go func() {
 			for nodes := range nodesEvent {
+				fmt.Println("Discovered nodes:", nodes)
 				u.updateNodes(nodes)
 			}
 		}()

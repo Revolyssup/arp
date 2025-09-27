@@ -9,19 +9,21 @@ import (
 	"github.com/Revolyssup/arp/pkg/config"
 	"github.com/Revolyssup/arp/pkg/discovery"
 	"github.com/Revolyssup/arp/pkg/eventbus"
-	"github.com/Revolyssup/arp/pkg/router"
+	"github.com/Revolyssup/arp/pkg/route"
+	httprouter "github.com/Revolyssup/arp/pkg/router/http"
+	"github.com/Revolyssup/arp/pkg/upstream"
 )
 
 type Listener struct {
 	config config.ListenerConfig
-	router *router.HTTPRouter
+	router *httprouter.Router
 	server *http.Server
 }
 
-func NewListener(cfg config.ListenerConfig, discoveryManager *discovery.DiscoveryManager, eventBus *eventbus.EventBus[config.Dynamic]) *Listener {
+func NewListener(cfg config.ListenerConfig, discoveryManager *discovery.DiscoveryManager, eventBus *eventbus.EventBus[config.Dynamic], routerFactory *route.Factory, upstreamFactory *upstream.Factory) *Listener {
 	l := &Listener{
 		config: cfg,
-		router: router.NewHTTPRouter(cfg.Name, discoveryManager),
+		router: httprouter.NewRouter(cfg.Name, routerFactory, upstreamFactory),
 	}
 	l.server = &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.Port),
@@ -48,6 +50,6 @@ func (l *Listener) updateRoutes(routes []config.RouteConfig, upstreams []config.
 	l.router.UpdateRoutes(routes, upstreams, plugins)
 }
 
-func (l *Listener) Stop() error {
-	return l.server.Shutdown(context.Background())
+func (l *Listener) Stop(ctx context.Context) error {
+	return l.server.Shutdown(ctx)
 }

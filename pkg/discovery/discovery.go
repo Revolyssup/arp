@@ -36,11 +36,10 @@ func NewDiscoveryManager(cfg []config.DiscoveryConfig) *DiscoveryManager {
 			log.Printf("failed to start discovery %s: %v", dcfg.Type, err)
 		}
 	}
-	log.Printf("RETURNED MANAGER FROM NEWDISCOVERYMANAGER %v", *mgr)
 	return mgr
 }
 
-func (d *DiscoveryManager) NewDiscovery(config config.DiscoveryRef) (<-chan []*types.Node, error) {
+func (d *DiscoveryManager) GetDiscovery(config config.DiscoveryRef) (<-chan []*types.Node, error) {
 	log.Printf("discoverers %v", d)
 	if _, exists := d.discoverers[config.Type]; exists {
 		return d.eb.Subscribe(config.Type), nil
