@@ -66,7 +66,7 @@ func TestPathMatcher(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			matcher := NewPathMatcher(logger.New(logger.LevelDebug))
+			matcher := NewPathMatcher(logger.New(logger.LevelError))
 			route := createTestRoute()
 			matcher.Add(tt.path, route)
 
@@ -81,7 +81,7 @@ func TestPathMatcher(t *testing.T) {
 }
 
 func TestPathMatcher_MultipleRoutes(t *testing.T) {
-	matcher := NewPathMatcher(logger.New(logger.LevelDebug))
+	matcher := NewPathMatcher(logger.New(logger.LevelError))
 
 	route1 := createTestRoute()
 	route2 := createTestRoute()
@@ -353,7 +353,7 @@ func BenchmarkPathMatcher(b *testing.B) {
 
 	for _, size := range sizes {
 		b.Run("Size_"+strconv.Itoa(size), func(b *testing.B) {
-			matcher := NewPathMatcher(logger.New(logger.LevelDebug))
+			matcher := NewPathMatcher(logger.New(logger.LevelError))
 
 			// Add routes with various path patterns
 			for i := 0; i < size; i++ {
@@ -474,7 +474,7 @@ func BenchmarkRouteIntersection(b *testing.B) {
 
 // Benchmark for the complete matching flow
 func BenchmarkCompleteMatchingFlow(b *testing.B) {
-	pathMatcher := NewPathMatcher(logger.New(logger.LevelDebug))
+	pathMatcher := NewPathMatcher(logger.New(logger.LevelError))
 	methodMatcher := NewMethodMatcher()
 	headerMatcher := NewHeaderMatcher()
 
