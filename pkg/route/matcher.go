@@ -4,13 +4,16 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
-	"sync"
+	"time"
+
+	"github.com/Revolyssup/arp/pkg/cache"
+	"github.com/Revolyssup/arp/pkg/logger"
 )
 
 // TODO: Use RadixTree for prefix matching for better performance
 type PathMatcher struct {
-	cache        map[string][]*Route
-	mx           sync.RWMutex
+	logger       *logger.Logger
+	cache        *cache.LRUCache[[]*Route]
 	staticRoutes map[string][]*Route
 	regexRoutes  []struct {
 		pattern *regexp.Regexp
@@ -19,7 +22,8 @@ type PathMatcher struct {
 	prefixRoutes map[string][]*Route
 }
 
-func NewPathMatcher() *PathMatcher {
+func NewPathMatcher(logger *logger.Logger) *PathMatcher {
+	l := logger.WithComponent("PathMatcher")
 	return &PathMatcher{
 		staticRoutes: make(map[string][]*Route),
 		regexRoutes: make([]struct {
@@ -27,7 +31,8 @@ func NewPathMatcher() *PathMatcher {
 			routes  []*Route
 		}, 0),
 		prefixRoutes: make(map[string][]*Route),
-		cache:        make(map[string][]*Route),
+		logger:       l,
+		cache:        cache.NewLRUCache[[]*Route](100, l),
 	}
 }
 
@@ -53,10 +58,8 @@ func (pm *PathMatcher) Add(pattern string, route *Route) {
 }
 
 func (pm *PathMatcher) Match(path string) []*Route {
-	pm.mx.RLock()
-	defer pm.mx.RUnlock()
-	if pm.cache[path] != nil {
-		return pm.cache[path]
+	if cached, ok := pm.cache.Get(path); ok {
+		return cached
 	}
 	var matches []*Route
 
@@ -78,7 +81,7 @@ func (pm *PathMatcher) Match(path string) []*Route {
 			matches = append(matches, regexRoute.routes...)
 		}
 	}
-	pm.cache[path] = matches
+	pm.cache.Set(path, matches, 30*time.Second)
 	return matches
 }
 
@@ -89,7 +92,7 @@ func (pm *PathMatcher) Clear() {
 		routes  []*Route
 	}, 0)
 	pm.prefixRoutes = make(map[string][]*Route)
-	pm.cache = make(map[string][]*Route)
+	pm.cache = cache.NewLRUCache[[]*Route](100, pm.logger)
 }
 
 type MethodMatcher struct {

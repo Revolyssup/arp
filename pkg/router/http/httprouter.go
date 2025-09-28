@@ -23,7 +23,7 @@ type Router struct {
 
 func NewRouter(listener string, routerFactory *route.Factory, upstreamFactory *upstream.Factory, parentLogger *logger.Logger) *Router {
 	return &Router{
-		pathMatcher:     route.NewPathMatcher(),
+		pathMatcher:     route.NewPathMatcher(parentLogger),
 		methodMatcher:   route.NewMethodMatcher(),
 		headerMatcher:   route.NewHeaderMatcher(),
 		upstreamFactory: upstreamFactory,
