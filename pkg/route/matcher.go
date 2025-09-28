@@ -4,10 +4,13 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 )
 
-// PathMatcher uses a prefix tree for efficient path matching
+// TODO: Use RadixTree for prefix matching for better performance
 type PathMatcher struct {
+	cache        map[string][]*Route
+	mx           sync.RWMutex
 	staticRoutes map[string][]*Route
 	regexRoutes  []struct {
 		pattern *regexp.Regexp
@@ -24,11 +27,11 @@ func NewPathMatcher() *PathMatcher {
 			routes  []*Route
 		}, 0),
 		prefixRoutes: make(map[string][]*Route),
+		cache:        make(map[string][]*Route),
 	}
 }
 
 func (pm *PathMatcher) Add(pattern string, route *Route) {
-	// Check if it's a regex pattern (contains special characters)
 	if strings.ContainsAny(pattern, ".*+?()|[]{}^$") {
 		regex, err := regexp.Compile(pattern)
 		if err == nil {
@@ -40,18 +43,21 @@ func (pm *PathMatcher) Add(pattern string, route *Route) {
 		return
 	}
 
-	// Check if it's a prefix pattern (ends with *)
 	if strings.HasSuffix(pattern, "*") {
 		prefix := strings.TrimSuffix(pattern, "*")
 		pm.prefixRoutes[prefix] = append(pm.prefixRoutes[prefix], route)
 		return
 	}
 
-	// Static path
 	pm.staticRoutes[pattern] = append(pm.staticRoutes[pattern], route)
 }
 
 func (pm *PathMatcher) Match(path string) []*Route {
+	pm.mx.RLock()
+	defer pm.mx.RUnlock()
+	if pm.cache[path] != nil {
+		return pm.cache[path]
+	}
 	var matches []*Route
 
 	// Check static routes first (exact match)
@@ -72,7 +78,7 @@ func (pm *PathMatcher) Match(path string) []*Route {
 			matches = append(matches, regexRoute.routes...)
 		}
 	}
-
+	pm.cache[path] = matches
 	return matches
 }
 
@@ -83,9 +89,9 @@ func (pm *PathMatcher) Clear() {
 		routes  []*Route
 	}, 0)
 	pm.prefixRoutes = make(map[string][]*Route)
+	pm.cache = make(map[string][]*Route)
 }
 
-// MethodMatcher uses a simple map for method matching
 type MethodMatcher struct {
 	routes map[string][]*Route
 }

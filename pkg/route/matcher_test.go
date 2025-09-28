@@ -103,7 +103,7 @@ func TestPathMatcher_MultipleRoutes(t *testing.T) {
 		{
 			name:          "Exact static match",
 			path:          "/api/v2/users",
-			expectedCount: 2, // route1 (prefix), route2 (static), route3 (regex)
+			expectedCount: 2,
 		},
 		{
 			name:          "No matches",
