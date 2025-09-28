@@ -3,10 +3,12 @@ routes:
     listener: http
     matches:
       - path: /*
+        headers:
+          X-Demo: demo
     upstream:
       discovery:
         type: demo
-      service: ip
+      service: header
     plugins:
       - name: demo2
   - name: route2

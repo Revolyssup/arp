@@ -88,9 +88,19 @@ func (r *Router) UpdateRoutes(routeConfigs []config.RouteConfig, upstreamConfigs
 			}
 			if match.Method != "" {
 				r.methodMatcher.Add(strings.ToUpper(match.Method), route)
+			} else {
+				r.methodMatcher.Add("GET", route)
+				r.methodMatcher.Add("POST", route)
+				r.methodMatcher.Add("PUT", route)
+				r.methodMatcher.Add("DELETE", route)
+				r.methodMatcher.Add("PATCH", route)
+				r.methodMatcher.Add("HEAD", route)
+				r.methodMatcher.Add("OPTIONS", route)
 			}
 			if len(match.Headers) > 0 {
 				r.headerMatcher.Add(match.Headers, route)
+			} else {
+				r.headerMatcher.Add(nil, route) // Match all headers
 			}
 		}
 	}
@@ -108,7 +118,10 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	// Step 2: Match by method
 	methodRoutes := r.methodMatcher.Match(req.Method)
-
+	if len(methodRoutes) == 0 {
+		http.NotFound(w, req)
+		return
+	}
 	// Step 3: Find intersection of path and method routes
 	candidateRoutes := route.IntersectRoutes(pathRoutes, methodRoutes)
 	if len(candidateRoutes) == 0 {
@@ -123,8 +136,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		http.NotFound(w, req)
 		return
 	}
-
-	// Use the first matching route (you might want to add priority logic here)
+	// For simplicity, pick the first matched route
 	route := finalRoutes[0]
 
 	if err := route.Plugins.HandleRequest(req); err != nil {

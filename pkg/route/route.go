@@ -1,11 +1,13 @@
 package route
 
 import (
+	"github.com/Revolyssup/arp/pkg/config"
 	"github.com/Revolyssup/arp/pkg/plugin"
 	"github.com/Revolyssup/arp/pkg/upstream"
 )
 
 type Route struct {
+	Matches  *config.Match
 	Plugins  *plugin.Chain
 	Upstream *upstream.Upstream
 }

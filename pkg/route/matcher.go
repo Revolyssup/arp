@@ -117,6 +117,7 @@ func (mm *MethodMatcher) Clear() {
 // HeaderMatcher handles header-based matching
 type HeaderMatcher struct {
 	headerRoutes map[string]map[string][]*Route // headerKey -> headerValue -> routes
+	globalRoutes []*Route                       //when no headers are specified
 }
 
 func NewHeaderMatcher() *HeaderMatcher {
@@ -126,6 +127,10 @@ func NewHeaderMatcher() *HeaderMatcher {
 }
 
 func (hm *HeaderMatcher) Add(headers map[string]string, route *Route) {
+	if headers == nil {
+		hm.globalRoutes = append(hm.globalRoutes, route)
+		return
+	}
 	for key, value := range headers {
 		if _, exists := hm.headerRoutes[key]; !exists {
 			hm.headerRoutes[key] = make(map[string][]*Route)
