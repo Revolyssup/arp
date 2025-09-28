@@ -2,7 +2,7 @@ routes:
   - name: route1
     listener: http
     matches:
-      - path: /abc
+      - path: /*
     upstream:
       discovery:
         type: demo

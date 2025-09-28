@@ -4,94 +4,187 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
-
-	"github.com/Revolyssup/arp/pkg/config"
+	"sync"
 )
 
-type Matcher interface {
-	Match(*http.Request) bool
+// TODO: Use RadixTree for prefix matching for better performance
+type PathMatcher struct {
+	cache        map[string][]*Route
+	mx           sync.RWMutex
+	staticRoutes map[string][]*Route
+	regexRoutes  []struct {
+		pattern *regexp.Regexp
+		routes  []*Route
+	}
+	prefixRoutes map[string][]*Route
 }
 
-type compositeMatcher struct {
-	matchers []Matcher
+func NewPathMatcher() *PathMatcher {
+	return &PathMatcher{
+		staticRoutes: make(map[string][]*Route),
+		regexRoutes: make([]struct {
+			pattern *regexp.Regexp
+			routes  []*Route
+		}, 0),
+		prefixRoutes: make(map[string][]*Route),
+		cache:        make(map[string][]*Route),
+	}
 }
 
-func NewCompositeMatcher(matchConfigs []config.Match) (Matcher, error) {
-	var matchers []Matcher
+func (pm *PathMatcher) Add(pattern string, route *Route) {
+	if strings.ContainsAny(pattern, ".*+?()|[]{}^$") {
+		regex, err := regexp.Compile(pattern)
+		if err == nil {
+			pm.regexRoutes = append(pm.regexRoutes, struct {
+				pattern *regexp.Regexp
+				routes  []*Route
+			}{pattern: regex, routes: []*Route{route}})
+		}
+		return
+	}
 
-	for _, mc := range matchConfigs {
-		if mc.Path != "" {
-			pathMatcher, err := newPathMatcher(mc.Path)
-			if err != nil {
-				return nil, err
+	if strings.HasSuffix(pattern, "*") {
+		prefix := strings.TrimSuffix(pattern, "*")
+		pm.prefixRoutes[prefix] = append(pm.prefixRoutes[prefix], route)
+		return
+	}
+
+	pm.staticRoutes[pattern] = append(pm.staticRoutes[pattern], route)
+}
+
+func (pm *PathMatcher) Match(path string) []*Route {
+	pm.mx.RLock()
+	defer pm.mx.RUnlock()
+	if pm.cache[path] != nil {
+		return pm.cache[path]
+	}
+	var matches []*Route
+
+	// Check static routes first (exact match)
+	if routes, exists := pm.staticRoutes[path]; exists {
+		matches = append(matches, routes...)
+	}
+
+	// Check prefix routes
+	for prefix, routes := range pm.prefixRoutes {
+		if strings.HasPrefix(path, prefix) {
+			matches = append(matches, routes...)
+		}
+	}
+
+	// Check regex routes
+	for _, regexRoute := range pm.regexRoutes {
+		if regexRoute.pattern.MatchString(path) {
+			matches = append(matches, regexRoute.routes...)
+		}
+	}
+	pm.cache[path] = matches
+	return matches
+}
+
+func (pm *PathMatcher) Clear() {
+	pm.staticRoutes = make(map[string][]*Route)
+	pm.regexRoutes = make([]struct {
+		pattern *regexp.Regexp
+		routes  []*Route
+	}, 0)
+	pm.prefixRoutes = make(map[string][]*Route)
+	pm.cache = make(map[string][]*Route)
+}
+
+type MethodMatcher struct {
+	routes map[string][]*Route
+}
+
+func NewMethodMatcher() *MethodMatcher {
+	return &MethodMatcher{
+		routes: make(map[string][]*Route),
+	}
+}
+
+func (mm *MethodMatcher) Add(method string, route *Route) {
+	mm.routes[method] = append(mm.routes[method], route)
+}
+
+func (mm *MethodMatcher) Match(method string) []*Route {
+	return mm.routes[method]
+}
+
+func (mm *MethodMatcher) Clear() {
+	mm.routes = make(map[string][]*Route)
+}
+
+// HeaderMatcher handles header-based matching
+type HeaderMatcher struct {
+	headerRoutes map[string]map[string][]*Route // headerKey -> headerValue -> routes
+}
+
+func NewHeaderMatcher() *HeaderMatcher {
+	return &HeaderMatcher{
+		headerRoutes: make(map[string]map[string][]*Route),
+	}
+}
+
+func (hm *HeaderMatcher) Add(headers map[string]string, route *Route) {
+	for key, value := range headers {
+		if _, exists := hm.headerRoutes[key]; !exists {
+			hm.headerRoutes[key] = make(map[string][]*Route)
+		}
+		hm.headerRoutes[key][value] = append(hm.headerRoutes[key][value], route)
+	}
+}
+
+func (hm *HeaderMatcher) Match(requestHeaders http.Header, candidateRoutes []*Route) []*Route {
+	if len(hm.headerRoutes) == 0 {
+		return candidateRoutes
+	}
+
+	candidateSet := make(map[*Route]bool)
+	for _, route := range candidateRoutes {
+		candidateSet[route] = true
+	}
+
+	// Filter routes that match all required headers
+	var matchedRoutes []*Route
+	for _, route := range candidateRoutes {
+		matchesAll := true
+
+		for headerKey, expectedValues := range hm.headerRoutes {
+			actualValue := requestHeaders.Get(headerKey)
+			if actualValue == "" {
+				matchesAll = false
+				break
 			}
-			matchers = append(matchers, pathMatcher)
+
+			// Check if this route requires this specific header
+			routeMatches := false
+			for expectedValue, routes := range expectedValues {
+				if actualValue == expectedValue {
+					// Check if this route is in the routes for this header value
+					for _, r := range routes {
+						if r == route {
+							routeMatches = true
+							break
+						}
+					}
+					break
+				}
+			}
+
+			if !routeMatches {
+				matchesAll = false
+				break
+			}
 		}
 
-		if len(mc.Headers) > 0 {
-			headerMatcher := newHeaderMatcher(mc.Headers)
-			matchers = append(matchers, headerMatcher)
-		}
-
-		if mc.Method != "" {
-			methodMatcher := newMethodMatcher(mc.Method)
-			matchers = append(matchers, methodMatcher)
-		}
-	}
-
-	return &compositeMatcher{matchers: matchers}, nil
-}
-
-func (m *compositeMatcher) Match(r *http.Request) bool {
-	for _, matcher := range m.matchers {
-		if matcher.Match(r) {
-			return true
-		}
-	}
-	return false
-}
-
-type pathMatcher struct {
-	pattern *regexp.Regexp
-}
-
-func newPathMatcher(pattern string) (Matcher, error) {
-	regex, err := regexp.Compile(pattern)
-	if err != nil {
-		return nil, err
-	}
-	return &pathMatcher{pattern: regex}, nil
-}
-
-func (m *pathMatcher) Match(r *http.Request) bool {
-	return m.pattern.MatchString(r.URL.Path)
-}
-
-type headerMatcher struct {
-	headers map[string]string
-}
-
-func newHeaderMatcher(headers map[string]string) Matcher {
-	return &headerMatcher{headers: headers}
-}
-
-func (m *headerMatcher) Match(r *http.Request) bool {
-	for key, value := range m.headers {
-		if r.Header.Get(key) != value {
-			return false
+		if matchesAll {
+			matchedRoutes = append(matchedRoutes, route)
 		}
 	}
-	return true
+
+	return matchedRoutes
 }
 
-type methodMatcher struct {
-	method string
-}
-
-func newMethodMatcher(method string) Matcher {
-	return &methodMatcher{method: strings.ToUpper(method)}
-}
-
-func (m *methodMatcher) Match(r *http.Request) bool {
-	return r.Method == m.method
+func (hm *HeaderMatcher) Clear() {
+	hm.headerRoutes = make(map[string]map[string][]*Route)
 }

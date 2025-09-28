@@ -1,7 +1,9 @@
 package router
 
 import (
+	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/Revolyssup/arp/pkg/config"
 	"github.com/Revolyssup/arp/pkg/logger"
@@ -12,22 +14,29 @@ import (
 )
 
 type Router struct {
-	routes          []*route.Route
-	routerFactory   *route.Factory
+	pathMatcher     *route.PathMatcher
+	methodMatcher   *route.MethodMatcher
+	headerMatcher   *route.HeaderMatcher
 	upstreamFactory *upstream.Factory
 	logger          *logger.Logger
 }
 
 func NewRouter(listener string, routerFactory *route.Factory, upstreamFactory *upstream.Factory, parentLogger *logger.Logger) *Router {
 	return &Router{
-		routerFactory:   routerFactory,
+		pathMatcher:     route.NewPathMatcher(),
+		methodMatcher:   route.NewMethodMatcher(),
+		headerMatcher:   route.NewHeaderMatcher(),
 		upstreamFactory: upstreamFactory,
 		logger:          parentLogger.WithComponent("router"),
 	}
 }
 
 func (r *Router) UpdateRoutes(routeConfigs []config.RouteConfig, upstreamConfigs []config.UpstreamConfig, pluginConfigs []config.PluginConfig) error {
-	var newRoutes []*route.Route
+	// Clear existing matchers
+	r.pathMatcher.Clear()
+	r.methodMatcher.Clear()
+	r.headerMatcher.Clear()
+
 	upstreamMap := make(map[string]config.UpstreamConfig)
 	for _, up := range upstreamConfigs {
 		upstreamMap[up.Name] = up
@@ -37,22 +46,21 @@ func (r *Router) UpdateRoutes(routeConfigs []config.RouteConfig, upstreamConfigs
 	for _, p := range pluginConfigs {
 		pluginMap[p.Name] = &p
 	}
+
 	for _, rc := range routeConfigs {
 		upstreamConfig := rc.Upstream
 		if upstreamConfig == nil {
-			continue // Skip routes with missing upstreams
+			continue
 		}
-		//If upstream configuration exists, then it will override the upstream passed in route.
 		if up, exists := upstreamMap[upstreamConfig.Name]; exists {
 			upstreamConfig = &up
 		}
-		// Create upstream
+
 		up, err := r.upstreamFactory.NewUpstream(*upstreamConfig)
 		if err != nil {
 			return err
 		}
 
-		// Create plugin chain
 		pluginChain := plugin.NewChain()
 		for _, pCfg := range rc.Plugins {
 			if pluginMap[pCfg.Name] != nil {
@@ -67,36 +75,70 @@ func (r *Router) UpdateRoutes(routeConfigs []config.RouteConfig, upstreamConfigs
 				r.logger.Warnf("Plugin type %s not found for plugin %s in route %s", pCfg.Type, pCfg.Name, rc.Name)
 			}
 		}
-		route := r.routerFactory.NewRoute(rc.Matches, pluginChain, up)
-		newRoutes = append(newRoutes, route)
-	}
 
-	r.routes = newRoutes
-	return nil
-}
+		route := &route.Route{
+			Plugins:  pluginChain,
+			Upstream: up,
+		}
 
-// It might be expensive to run each matcher when there are thousands of routes.
-// TODO: Optimise route matching
-func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	for _, route := range r.routes {
-		if route.Matcher.Match(req) {
-			if err := route.Plugins.HandleRequest(req); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
+		// Add route to all matchers
+		for _, match := range rc.Matches {
+			if match.Path != "" {
+				r.pathMatcher.Add(match.Path, route)
 			}
-
-			// Get upstream node
-			node := route.Upstream.SelectNode()
-			if node == nil {
-				http.Error(w, "No available upstream nodes", http.StatusServiceUnavailable)
-				return
+			if match.Method != "" {
+				r.methodMatcher.Add(strings.ToUpper(match.Method), route)
 			}
-			wrappedWriter := route.Plugins.WrapResponseWriter(w)
-			proxy := proxy.NewReverseProxy()
-			proxy.ServeHTTP(wrappedWriter, req, node.URL)
-			return
+			if len(match.Headers) > 0 {
+				r.headerMatcher.Add(match.Headers, route)
+			}
 		}
 	}
 
-	http.NotFound(w, req)
+	return nil
+}
+
+func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	// Step 1: Match by path
+	pathRoutes := r.pathMatcher.Match(req.URL.Path)
+	if len(pathRoutes) == 0 {
+		http.NotFound(w, req)
+		return
+	}
+
+	// Step 2: Match by method
+	methodRoutes := r.methodMatcher.Match(req.Method)
+
+	// Step 3: Find intersection of path and method routes
+	candidateRoutes := route.IntersectRoutes(pathRoutes, methodRoutes)
+	if len(candidateRoutes) == 0 {
+		fmt.Println("Candidate routes empty after method matching")
+		http.NotFound(w, req)
+		return
+	}
+
+	// Step 4: Match by headers if needed
+	finalRoutes := r.headerMatcher.Match(req.Header, candidateRoutes)
+	if len(finalRoutes) == 0 {
+		http.NotFound(w, req)
+		return
+	}
+
+	// Use the first matching route (you might want to add priority logic here)
+	route := finalRoutes[0]
+
+	if err := route.Plugins.HandleRequest(req); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	node := route.Upstream.SelectNode()
+	if node == nil {
+		http.Error(w, "No available upstream nodes", http.StatusServiceUnavailable)
+		return
+	}
+
+	wrappedWriter := route.Plugins.WrapResponseWriter(w)
+	proxy := proxy.NewReverseProxy()
+	proxy.ServeHTTP(wrappedWriter, req, node.URL)
 }

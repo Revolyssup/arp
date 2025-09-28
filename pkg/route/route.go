@@ -1,13 +1,11 @@
 package route
 
 import (
-	"github.com/Revolyssup/arp/pkg/config"
 	"github.com/Revolyssup/arp/pkg/plugin"
 	"github.com/Revolyssup/arp/pkg/upstream"
 )
 
 type Route struct {
-	Matcher  Matcher
 	Plugins  *plugin.Chain
 	Upstream *upstream.Upstream
 }
@@ -17,14 +15,24 @@ type Factory struct{}
 func NewFactory() *Factory {
 	return &Factory{}
 }
-func (f *Factory) NewRoute(matches []config.Match, plugins *plugin.Chain, up *upstream.Upstream) *Route {
-	matcher, err := NewCompositeMatcher(matches)
-	if err != nil {
-		return nil
+
+func IntersectRoutes(r1, r2 []*Route) []*Route {
+	if len(r1) == 0 {
+		return r2
 	}
-	return &Route{
-		Matcher:  matcher,
-		Plugins:  plugins,
-		Upstream: up,
+	if len(r2) == 0 {
+		return r1
 	}
+	set := make(map[*Route]bool)
+	for _, route := range r1 {
+		set[route] = true
+	}
+
+	var result []*Route
+	for _, route := range r2 {
+		if set[route] {
+			result = append(result, route)
+		}
+	}
+	return result
 }
