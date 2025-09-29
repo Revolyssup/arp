@@ -19,6 +19,7 @@ routes:
       name: backend2
     plugins:
       - name: responsecache
+      - name: demo2
 upstreams:
   - name: backend1
     nodes:
