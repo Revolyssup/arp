@@ -1,11 +1,15 @@
 # ARP - Another Reverse Proxy
 
+![arp](./img/arp.png)
+
 ## Static configuration
 
 ```yaml
 listeners:
   - name: http
     port: 8080
+  - name: http2
+    port: 8081
 
 providers:
   - name: file
@@ -16,6 +20,7 @@ discovery:
   - type: demo
     config:
       interval: 10s
+log_level: info
 ```
 
 ## Dynamic Configuration
@@ -25,35 +30,44 @@ routes:
   - name: route1
     listener: http
     matches:
-      - path: /ip
+      - path: /headers
+        headers:
+          X-Demo: demo
     upstream:
       discovery:
         type: demo
+      service: header
     plugins:
       - name: demo2
   - name: route2
-    listener: http
+    listener: http2
     matches:
-      - path: /headers
+      - path: /*
     upstream:
-      name: backend1
+      name: backend2
     plugins:
-      - name: demo
+      - name: responsecache
+      - name: demo2
 upstreams:
   - name: backend1
     nodes:
       - url: https://httpbin.org/headers
+  - name: backend2
+    nodes:
+      - url: http://127.0.0.1:9090
       # - url: http://mockbin.org/headers
 plugins:
-  - name: demo
-    type: demo
+  - name: responsecache
+    type: responsecache
     config:
-      message: "Hello from demo plugin!"
+      ttl: 30
+      key: uri
+      size: 2
   - name: demo2
     type: demo
     config:
       message: "Hello from demo2 plugin!"
-      
+
 ```
 
 ### Usage
