@@ -5,6 +5,7 @@ import (
 	"sort"
 
 	"github.com/Revolyssup/arp/pkg/plugin/demo"
+	"github.com/Revolyssup/arp/pkg/plugin/responsecache"
 	"github.com/Revolyssup/arp/pkg/plugin/types"
 )
 
@@ -28,21 +29,29 @@ func (c *Chain) Sort() {
 	})
 }
 
-func (c *Chain) HandleRequest(req *http.Request) error {
+func (c *Chain) Destroy() {
 	for _, p := range c.plugins {
-		if err := p.HandleRequest(req); err != nil {
-			return err
-		}
+		p.Destroy()
 	}
-	return nil
 }
 
-func (c *Chain) WrapResponseWriter(w http.ResponseWriter) http.ResponseWriter {
+func (c *Chain) HandleRequest(req *http.Request, res http.ResponseWriter) (bool, error) {
+	for _, p := range c.plugins {
+		if final, err := p.HandleRequest(req, res); err != nil {
+			return final, err
+		} else if final {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (c *Chain) HandleResponse(req *http.Request, w http.ResponseWriter) http.ResponseWriter {
 	// Wrap in reverse order so the first plugin in the chain
 	// becomes the innermost wrapper (executed last on response)
 	wrapped := w
 	for i := len(c.plugins) - 1; i >= 0; i-- {
-		wrapped = c.plugins[i].WrapResponseWriter(wrapped)
+		wrapped = c.plugins[i].HandleResponse(req, wrapped)
 	}
 	return wrapped
 }
@@ -55,4 +64,5 @@ var Registry *types.Registry
 func init() {
 	Registry = types.NewRegistry()
 	Registry.Register("demo", demo.NewPlugin)
+	Registry.Register("responsecache", responsecache.NewPlugin)
 }

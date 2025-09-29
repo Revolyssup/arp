@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -16,6 +17,8 @@ type Node[T any] struct {
 }
 
 type LRUCache[T any] struct {
+	ctx     context.Context
+	cancel  context.CancelFunc
 	Head    *Node[T]
 	Tail    *Node[T]
 	m       map[string]*Node[T] // ← Store NODES, not just values
@@ -25,11 +28,25 @@ type LRUCache[T any] struct {
 }
 
 func NewLRUCache[T any](size int, logger *logger.Logger) *LRUCache[T] {
+	ctx, cancel := context.WithCancel(context.Background()) // should parent context be passed?
 	return &LRUCache[T]{
 		m:       make(map[string]*Node[T]),
 		maxSize: size,
+		ctx:     ctx,
+		cancel:  cancel,
 		log:     logger.WithComponent("LRUCache"),
 	}
+}
+
+func (nlru *LRUCache[T]) Reset() {
+	nlru.log.Debugf("Resetting LRU Cache")
+	nlru.mx.Lock()
+	defer nlru.mx.Unlock()
+	nlru.cancel()
+	nlru.ctx, nlru.cancel = context.WithCancel(context.Background())
+	nlru.Head = nil
+	nlru.Tail = nil
+	nlru.m = make(map[string]*Node[T])
 }
 
 func (nlru *LRUCache[T]) DebugGet() map[string]T {
@@ -115,6 +132,7 @@ func (lru *LRUCache[T]) Delete(key string) (ok bool) {
 		delete(lru.m, key)
 		return true
 	}
+	lru.log.Debugf("Key %s not found in LRU Cache for delete", key)
 	return false
 }
 
@@ -129,7 +147,7 @@ func (lru *LRUCache[T]) poptail() {
 }
 
 func (lru *LRUCache[T]) Set(key string, val T, ttl time.Duration) {
-	lru.log.Debugf("Setting key %s in LRU Cache", key)
+	lru.log.Debugf("Setting key %s in LRU Cache with TTL %v", key, ttl)
 	lru.mx.Lock()
 	defer lru.mx.Unlock()
 
@@ -159,9 +177,15 @@ func (lru *LRUCache[T]) Set(key string, val T, ttl time.Duration) {
 	// TTL handling (same as before)
 	if ttl >= 0 {
 		go func(key string) {
-			<-time.After(ttl)
-			lru.log.Debugf("TTL expired for key %s, deleting from LRU Cache after %v", key, ttl)
-			lru.Delete(key)
+			select {
+			case <-lru.ctx.Done():
+				lru.log.Debugf("context done, stopping TTL goroutine for key %s", key)
+				return
+			case <-time.After(ttl):
+				lru.log.Debugf("TTL expired for key %s, deleting from LRU Cache after %v", key, ttl)
+				lru.Delete(key)
+			}
+
 		}(key)
 	}
 }

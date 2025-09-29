@@ -2,7 +2,7 @@ routes:
   - name: route1
     listener: http
     matches:
-      - path: /*
+      - path: /headers
         headers:
           X-Demo: demo
     upstream:
@@ -14,21 +14,26 @@ routes:
   - name: route2
     listener: http2
     matches:
-      - path: /headers
+      - path: /*
     upstream:
-      name: backend1
+      name: backend2
     plugins:
-      - name: demo
+      - name: responsecache
 upstreams:
   - name: backend1
     nodes:
       - url: https://httpbin.org/headers
+  - name: backend2
+    nodes:
+      - url: http://127.0.0.1:9090
       # - url: http://mockbin.org/headers
 plugins:
-  - name: demo
-    type: demo
+  - name: responsecache
+    type: responsecache
     config:
-      message: "Hello from demo plugin!"
+      ttl: 30
+      key: uri
+      size: 2
   - name: demo2
     type: demo
     config:

@@ -3,6 +3,7 @@ package demo
 import (
 	"net/http"
 
+	"github.com/Revolyssup/arp/pkg/logger"
 	"github.com/Revolyssup/arp/pkg/plugin/types"
 )
 
@@ -15,7 +16,7 @@ type DemoResponseWriter struct {
 	plugin *DemoPlugin
 }
 
-func NewPlugin() types.Plugin {
+func NewPlugin(logger *logger.Logger) types.Plugin {
 	return &DemoPlugin{
 		config: types.PluginConf{},
 	}
@@ -25,11 +26,14 @@ func (p *DemoPlugin) GetConfig() types.PluginConf {
 	return p.config
 }
 
-func (p *DemoPlugin) SetConfig(conf types.PluginConf) {
+func (p *DemoPlugin) ValidateAndSetConfig(conf types.PluginConf) error {
 	p.config = conf
+	return nil
 }
 
-func (p *DemoPlugin) HandleRequest(req *http.Request) error {
+func (p *DemoPlugin) Destroy() {}
+
+func (p *DemoPlugin) HandleRequest(req *http.Request, _ http.ResponseWriter) (bool, error) {
 	req.Header.Set("X-Demo-Plugin", "RequestProcessed")
 	conf := p.GetConfig()
 	for k, v := range conf {
@@ -37,10 +41,10 @@ func (p *DemoPlugin) HandleRequest(req *http.Request) error {
 			req.Header.Set("X-Demo-"+k, strVal)
 		}
 	}
-	return nil
+	return false, nil
 }
 
-func (p *DemoPlugin) WrapResponseWriter(w http.ResponseWriter) http.ResponseWriter {
+func (p *DemoPlugin) HandleResponse(_ *http.Request, w http.ResponseWriter) http.ResponseWriter {
 	return &DemoResponseWriter{
 		BaseResponseWriter: &types.BaseResponseWriter{ResponseWriter: w},
 		plugin:             p,

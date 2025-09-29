@@ -1,7 +1,6 @@
 package router
 
 import (
-	"fmt"
 	"net/http"
 	"strings"
 
@@ -14,6 +13,7 @@ import (
 )
 
 type Router struct {
+	pluginChain     []*plugin.Chain
 	pathMatcher     *route.PathMatcher
 	methodMatcher   *route.MethodMatcher
 	headerMatcher   *route.HeaderMatcher
@@ -27,6 +27,7 @@ func NewRouter(listener string, routerFactory *route.Factory, upstreamFactory *u
 		methodMatcher:   route.NewMethodMatcher(),
 		headerMatcher:   route.NewHeaderMatcher(),
 		upstreamFactory: upstreamFactory,
+		pluginChain:     []*plugin.Chain{},
 		logger:          parentLogger.WithComponent("router"),
 	}
 }
@@ -36,7 +37,10 @@ func (r *Router) UpdateRoutes(routeConfigs []config.RouteConfig, upstreamConfigs
 	r.pathMatcher.Clear()
 	r.methodMatcher.Clear()
 	r.headerMatcher.Clear()
-
+	//cleanup plugin
+	for _, p := range r.pluginChain {
+		p.Destroy()
+	}
 	upstreamMap := make(map[string]config.UpstreamConfig)
 	for _, up := range upstreamConfigs {
 		upstreamMap[up.Name] = up
@@ -67,14 +71,19 @@ func (r *Router) UpdateRoutes(routeConfigs []config.RouteConfig, upstreamConfigs
 				pCfg = *pluginMap[pCfg.Name]
 			}
 			if pluginFactory, exists := plugin.Registry.Get(pCfg.Type); exists {
-				plugin := pluginFactory()
+				plugin := pluginFactory(r.logger)
 				r.logger.Infof("Adding plugin %s to route %s", pCfg.Name, rc.Name)
-				plugin.SetConfig(pCfg.Config)
+				err := plugin.ValidateAndSetConfig(pCfg.Config)
+				if err != nil {
+					r.logger.Warnf("Invalid config for plugin %s in route %s: %v", pCfg.Name, rc.Name, err)
+					continue
+				}
 				pluginChain.Add(plugin)
 			} else {
 				r.logger.Warnf("Plugin type %s not found for plugin %s in route %s", pCfg.Type, pCfg.Name, rc.Name)
 			}
 		}
+		r.pluginChain = append(r.pluginChain, pluginChain)
 
 		route := &route.Route{
 			Plugins:  pluginChain,
@@ -125,7 +134,6 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	// Step 3: Find intersection of path and method routes
 	candidateRoutes := route.IntersectRoutes(pathRoutes, methodRoutes)
 	if len(candidateRoutes) == 0 {
-		fmt.Println("Candidate routes empty after method matching")
 		http.NotFound(w, req)
 		return
 	}
@@ -139,18 +147,21 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	// For simplicity, pick the first matched route
 	route := finalRoutes[0]
 
-	if err := route.Plugins.HandleRequest(req); err != nil {
+	finished, err := route.Plugins.HandleRequest(req, w)
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
+	if finished {
+		return
+	}
 	node := route.Upstream.SelectNode()
 	if node == nil {
 		http.Error(w, "No available upstream nodes", http.StatusServiceUnavailable)
 		return
 	}
 
-	wrappedWriter := route.Plugins.WrapResponseWriter(w)
+	wrappedWriter := route.Plugins.HandleResponse(req, w)
 	proxy := proxy.NewReverseProxy()
 	proxy.ServeHTTP(wrappedWriter, req, node.URL)
 }

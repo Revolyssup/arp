@@ -2,20 +2,26 @@ package types
 
 import (
 	"net/http"
+
+	"github.com/Revolyssup/arp/pkg/logger"
 )
 
 // TODO: Make this a little more dynamic.
 type PluginConf map[string]any
 
 type Plugin interface {
-	HandleRequest(*http.Request) error
-	WrapResponseWriter(http.ResponseWriter) http.ResponseWriter
+	//If the plugin returns final, no further plugins will be executed
+	//The res at this stage won't have any data written from upstream and plugin can use to early return a response
+	HandleRequest(req *http.Request, res http.ResponseWriter) (final bool, err error)
+	// HandleResponse should be used when the plugin needs to act on the upstream response.
+	HandleResponse(*http.Request, http.ResponseWriter) http.ResponseWriter
 	Priority() int
 	GetConfig() PluginConf
-	SetConfig(PluginConf)
+	ValidateAndSetConfig(PluginConf) error //Returns any validation error
+	Destroy()                              // garbage collection
 }
 
-type PluginFactory func() Plugin
+type PluginFactory func(logger *logger.Logger) Plugin
 
 type ResponseWriterWrapper interface {
 	http.ResponseWriter
