@@ -124,7 +124,6 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		http.NotFound(w, req)
 		return
 	}
-
 	// Step 2: Match by method
 	methodRoutes := r.methodMatcher.Match(req.Method)
 	if len(methodRoutes) == 0 {
@@ -137,9 +136,14 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		http.NotFound(w, req)
 		return
 	}
-
 	// Step 4: Match by headers if needed
 	finalRoutes := r.headerMatcher.Match(req.Header, candidateRoutes)
+	if len(finalRoutes) == 0 {
+		http.NotFound(w, req)
+		return
+	}
+
+	finalRoutes = route.IntersectRoutes(finalRoutes, candidateRoutes)
 	if len(finalRoutes) == 0 {
 		http.NotFound(w, req)
 		return

@@ -154,6 +154,7 @@ func (hm *HeaderMatcher) Match(requestHeaders http.Header, candidateRoutes []*Ro
 
 	// Filter routes that match all required headers
 	var matchedRoutes []*Route
+	matchedRoutes = append(matchedRoutes, hm.globalRoutes...)
 	for _, route := range candidateRoutes {
 		matchesAll := true
 
