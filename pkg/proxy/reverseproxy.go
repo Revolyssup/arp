@@ -1,7 +1,6 @@
 package proxy
 
 import (
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -49,8 +48,6 @@ func (p *ReverseProxy) copyAndFlush(dst http.ResponseWriter, src io.Reader, buff
 	for {
 		n, err := src.Read(buf)
 		if n > 0 {
-			// Write the data
-			fmt.Println("writing ", n, " bytes")
 			if _, writeErr := dst.Write(buf[:n]); writeErr != nil {
 				break
 			}
