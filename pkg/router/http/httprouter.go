@@ -19,6 +19,7 @@ type Router struct {
 	headerMatcher   *route.HeaderMatcher
 	upstreamFactory *upstream.Factory
 	logger          *logger.Logger
+	proxyService    *proxy.Service
 }
 
 func NewRouter(listener string, routerFactory *route.Factory, upstreamFactory *upstream.Factory, parentLogger *logger.Logger) *Router {
@@ -29,6 +30,7 @@ func NewRouter(listener string, routerFactory *route.Factory, upstreamFactory *u
 		upstreamFactory: upstreamFactory,
 		pluginChain:     []*plugin.Chain{},
 		logger:          parentLogger.WithComponent("router"),
+		proxyService:    proxy.NewService(parentLogger),
 	}
 }
 
@@ -166,6 +168,6 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	wrappedWriter := route.Plugins.HandleResponse(req, w)
-	proxy := proxy.NewReverseProxy(r.logger)
+	proxy := proxy.NewReverseProxy(r.logger, r.proxyService)
 	proxy.ServeHTTP(wrappedWriter, req, node.URL)
 }

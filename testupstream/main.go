@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -22,7 +24,7 @@ func main() {
 	})
 
 	http.HandleFunc("/ip", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, fmt.Sprintf("{\"client_ip\": \"%s\"}", string(r.RemoteAddr)))
+		fmt.Fprintf(w, `{"client_ip": "%s"}`, r.RemoteAddr)
 	})
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
@@ -52,7 +54,50 @@ func main() {
 			}
 		}
 	})
+	http.HandleFunc("/stream", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.Header().Set("Transfer-Encoding", "chunked")
+		w.WriteHeader(http.StatusOK)
 
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			http.Error(w, "Streaming not supported", http.StatusInternalServerError)
+			return
+		}
+
+		for i := 1; i <= 10; i++ {
+			fmt.Fprintf(w, "Chunk %d at %s\n", i, time.Now().Format("15:04:05"))
+			flusher.Flush()
+			time.Sleep(1 * time.Second)
+		}
+	})
+
+	// Large response body
+	http.HandleFunc("/large", func(w http.ResponseWriter, r *http.Request) {
+		sizeStr := r.URL.Query().Get("size")
+		size := 1024 * 1024 // 1MB default
+		if sizeStr != "" {
+			if parsedSize, err := strconv.Atoi(sizeStr); err == nil {
+				size = parsedSize
+			}
+		}
+
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Content-Length", strconv.Itoa(size))
+
+		// Generate repetitive data
+		data := make([]byte, min(size, 8192)) // 8KB chunks
+		for i := range data {
+			data[i] = byte(i % 256)
+		}
+
+		written := 0
+		for written < size {
+			chunkSize := min(len(data), size-written)
+			w.Write(data[:chunkSize])
+			written += chunkSize
+		}
+	})
 	fmt.Println("Server running on :9090")
 	http.ListenAndServe(":9090", nil)
 }

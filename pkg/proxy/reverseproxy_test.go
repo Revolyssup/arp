@@ -16,7 +16,7 @@ const UpstreamAddr = "127.0.0.1:9090"
 
 func TestReverseProxy_ServeHTTP(t *testing.T) {
 	targetURL, _ := url.Parse(fmt.Sprintf("http://%s", UpstreamAddr))
-	proxy := NewReverseProxy(logger.New(logger.LevelDebug))
+	proxy := NewReverseProxy(logger.New(logger.LevelDebug), NewService(logger.New(logger.LevelDebug)))
 	req := httptest.NewRequest(http.MethodGet, "http://example.com/headers", nil)
 	w := httptest.NewRecorder()
 

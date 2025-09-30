@@ -17,8 +17,8 @@ routes:
       - path: /*
     upstream:
       name: backend
-    plugins:
-      - name: demo2
+    # plugins:
+    #   - name: demo2
 upstreams:
   - name: backend
     nodes:

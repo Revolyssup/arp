@@ -6,7 +6,7 @@ run: build
 
 .PHONY: testupstream
 testupstream:
-	go run ./testupstream/main.go
+	go run ./testupstream/main.go &
 
 run-unit-test: testupstream
 	go test ./... -v
