@@ -14,6 +14,7 @@ type Plugin interface {
 	//The res at this stage won't have any data written from upstream and plugin can use to early return a response
 	HandleRequest(req *http.Request, res http.ResponseWriter) (final bool, err error)
 	// HandleResponse should be used when the plugin needs to act on the upstream response.
+	//NOTE: If the plugin wraps responsewriter then make sure to implement hijacker or websocket requests will fail
 	HandleResponse(*http.Request, http.ResponseWriter) http.ResponseWriter
 	Priority() int
 	GetConfig() PluginConf

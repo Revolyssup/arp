@@ -1,6 +1,8 @@
 package demo
 
 import (
+	"bufio"
+	"net"
 	"net/http"
 
 	"github.com/Revolyssup/arp/pkg/logger"
@@ -13,7 +15,8 @@ type DemoPlugin struct {
 
 type DemoResponseWriter struct {
 	*types.BaseResponseWriter
-	plugin *DemoPlugin
+	plugin   *DemoPlugin
+	hijacker http.Hijacker
 }
 
 func NewPlugin(logger *logger.Logger) types.Plugin {
@@ -45,10 +48,17 @@ func (p *DemoPlugin) HandleRequest(req *http.Request, _ http.ResponseWriter) (bo
 }
 
 func (p *DemoPlugin) HandleResponse(_ *http.Request, w http.ResponseWriter) http.ResponseWriter {
+	hijacker, _ := w.(http.Hijacker)
 	return &DemoResponseWriter{
 		BaseResponseWriter: &types.BaseResponseWriter{ResponseWriter: w},
 		plugin:             p,
+		hijacker:           hijacker, // copy the hijacker from underlying response
 	}
+}
+
+// To make sure the plugin works with websocket
+func (w *DemoResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	return w.hijacker.Hijack()
 }
 
 // Override WriteHeader to modify response headers

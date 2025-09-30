@@ -23,17 +23,21 @@ type DemoDiscovery struct {
 	log *logger.Logger
 }
 
+const (
+	DemoServiceAddress = "localhost:9090"
+)
+
 func (d *DemoDiscovery) Start(name string, eb *eventbus.EventBus[[]*types.Node], cfg map[string]any) error {
 	d.log.Infof("Starting demo discovery with config: %v", cfg)
 	// For demo purposes, we will just publish a static list of nodes every 10 seconds.
 	nodes := []*types.Node{
 		{
 			ServiceName: "header",
-			URL:         &url.URL{Scheme: "http", Host: "httpbin.org", Path: "/headers"},
+			URL:         &url.URL{Scheme: "http", Host: DemoServiceAddress, Path: "/headers"},
 		},
 		{
 			ServiceName: "ip",
-			URL:         &url.URL{Scheme: "http", Host: "httpbin.org", Path: "/ip"},
+			URL:         &url.URL{Scheme: "http", Host: DemoServiceAddress, Path: "/ip"},
 		},
 	}
 	t := 10 * time.Second

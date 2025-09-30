@@ -45,3 +45,11 @@ The previous abstraction was stupid and I hadn't thought it through. The plugin 
 ## Changes in LRU Cache and Destroy() method in Plugin Interface
 
 LRUCache is instantiated per plugin instance and plugin instances are recreated on config changes. This means that previous plugin instances are no longer used but each plugin instance might be working with some internal or external state which might be referenced by some go routines which might cause both goroutine and memory leak. Destroy() method will be called on the previous pluginchain when new pluginchain is created in httprouter. Plugin chain will call Destroy() on each plugin which will allow it to do cleanup. Example of this cleanup: When responsecache plugin instance is no longer in use, it would want to Reset it's LRUCache to avoid go routine leak from the lrucache. And to propagate this cancellation to LRUCache, a Reset() method is added which will reset the underlying data and cancel all running go routines.
+
+## Support Websocket
+
+Websocket's case needs to be handled separately in ReverseProxy by hijacking the connection and setting io.Copy at L4 level. Eventually I think the better way would be to implement custom round tripper as the default one doesn't support websocket and doesn't give access to underlying socket for different use cases.
+
+## fix: Use path from route
+
+Previosly after route matching, the complete URI from upstream.node was being used which is absurd. upstream.node should only provide the IP:PORT and all other things like headers, URI, etc will be used from client request.

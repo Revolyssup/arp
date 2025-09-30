@@ -2,17 +2,22 @@ package proxy
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"testing"
+
+	"github.com/Revolyssup/arp/pkg/logger"
 )
 
+const UpstreamAddr = "127.0.0.1:9090"
+
 func TestReverseProxy_ServeHTTP(t *testing.T) {
-	targetURL, _ := url.Parse("http://httpbin.org/headers")
-	proxy := NewReverseProxy()
-	req := httptest.NewRequest(http.MethodGet, "http://example.com/test", nil)
+	targetURL, _ := url.Parse(fmt.Sprintf("http://%s", UpstreamAddr))
+	proxy := NewReverseProxy(logger.New(logger.LevelDebug))
+	req := httptest.NewRequest(http.MethodGet, "http://example.com/headers", nil)
 	w := httptest.NewRecorder()
 
 	proxy.ServeHTTP(w, req, targetURL)
