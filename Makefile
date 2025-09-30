@@ -1,5 +1,5 @@
 build:
-	go build -o bin/arp ./cmd/
+	go build -ldflags="-s -w" -o bin/arp ./cmd/
 
 run: build
 	./bin/arp
