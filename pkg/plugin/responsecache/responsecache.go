@@ -122,6 +122,9 @@ func (w *DemoResponseWriter) WriteHeader(statusCode int) {
 func (w *DemoResponseWriter) Write(data []byte) (int, error) {
 	conf := w.plugin.GetConfig()
 	key := w.key
+	//TODO: Fixme: This is problematic. When responsecache plugin is used with streaming scenarios.
+	// Other than the fact that ResponseWriter here wont do streaming and write all at once which is generatl problem for now while using plugin.
+	// The last chunk will be the one that gets cached and subsequent requests will get only that chunk.
 	if ttl, ok := conf["ttl"].(int); ok {
 		w.plugin.cache.Set(key, data, time.Duration(ttl)*time.Second)
 	} else {
