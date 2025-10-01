@@ -1,4 +1,4 @@
-name: Unit tests
+name: ARP E2E tests
 
 on:
   push:
@@ -28,5 +28,5 @@ jobs:
         run: go mod tidy
 
       - name: Run tests
-        run:  make run-unit-test
+        run:  make test-e2e
 

@@ -14,6 +14,16 @@ var upgrader = websocket.Upgrader{
 }
 
 func main() {
+	http.HandleFunc("/slowheaders", func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(2 * time.Second)
+		for name, values := range r.Header {
+			for _, value := range values {
+				fmt.Fprintf(w, "%s: %s\n", name, value)
+			}
+		}
+		fmt.Fprintf(w, "httpbin")
+	})
+
 	http.HandleFunc("/headers", func(w http.ResponseWriter, r *http.Request) {
 		for name, values := range r.Header {
 			for _, value := range values {

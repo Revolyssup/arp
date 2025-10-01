@@ -1,0 +1,16 @@
+listeners:
+  - name: http
+    port: 8080
+  - name: http2
+    port: 8081
+
+providers:
+  - name: file
+    type: file
+    config:
+      path: "./dynamic.yaml"
+discovery:
+  - type: demo
+    config:
+      interval: 10s
+log_level: debug

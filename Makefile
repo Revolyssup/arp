@@ -10,3 +10,6 @@ testupstream:
 
 run-unit-test: testupstream
 	go test ./... -v
+
+test-e2e: testupstream
+	ginkgo run -v --race ./test/e2e --timeout 30m

@@ -31,7 +31,7 @@ func NewService(log *logger.Logger) *Service {
 	}
 }
 
-type UpgradeHandler func(http.ResponseWriter, *http.Request, net.Conn)
+type UpgradeHandler func(http.ResponseWriter, *http.Request, net.Conn, *http.Response)
 
 type ConnPool struct {
 	target *url.URL
@@ -83,23 +83,26 @@ func (p *ReverseProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	upstreamReq := r.Clone(r.Context())
 	upstreamReq.URL.Scheme = p.targetURL.Scheme
 	upstreamReq.URL.Host = p.targetURL.Host
-	removeHopHeaders(upstreamReq.Header)
-
-	var upgradeHandler UpgradeHandler
-	if isWebSocketUpgrade(r) {
-		upgradeHandler = p.webSocketUpgradeHandler
-	}
-
-	p.roundTrip(w, r, upstreamReq, upgradeHandler)
+	upstreamReq.Header = r.Header.Clone()
+	p.roundTrip(w, r, upstreamReq)
 }
 
 // Custom round trip implementation
-func (p *ReverseProxy) roundTrip(w http.ResponseWriter, r *http.Request, upstreamReq *http.Request, upgradeHandler UpgradeHandler) {
+func (p *ReverseProxy) roundTrip(w http.ResponseWriter, r *http.Request, upstreamReq *http.Request) {
 	conn, err := p.connPool.Get()
 	if err != nil {
 		p.logger.Errorf("Failed to get connection from pool: %v", err)
 		http.Error(w, "Bad Gateway", http.StatusBadGateway)
 		return
+	}
+	var upgradeHandler UpgradeHandler
+	if isWebSocketUpgrade(r) {
+		fmt.Println(r.Header)
+		upgradeHandler = p.webSocketUpgradeHandler
+	} else {
+		fmt.Println("REMOVING HOP HEADERS")
+		//TODO: fixme: removeHopHeaders unconditionally and add new for specific upgradehandler
+		removeHopHeaders(upstreamReq.Header)
 	}
 
 	// we don't need to put back long lived connections like WebSocket for now.
@@ -127,7 +130,7 @@ func (p *ReverseProxy) handleResponse(conn net.Conn, w http.ResponseWriter, r *h
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusSwitchingProtocols && upgradeHandler != nil {
-		upgradeHandler(w, r, conn)
+		upgradeHandler(w, r, conn, resp)
 		return
 	}
 
@@ -137,6 +140,9 @@ func (p *ReverseProxy) handleResponse(conn net.Conn, w http.ResponseWriter, r *h
 	w.WriteHeader(resp.StatusCode)
 
 	if isStreamingResponse(resp) {
+		//ideally instead of simple copy and flush. httputil.ChunkedWriter can be used.
+		// But for some fun reasons, I cannot use it currently.
+		// TODO: Replace this with chunked writer later.
 		p.copyAndFlush(w, resp.Body, bufferSize)
 	} else {
 		buf := p.service.buf.Get()
@@ -145,7 +151,7 @@ func (p *ReverseProxy) handleResponse(conn net.Conn, w http.ResponseWriter, r *h
 	}
 }
 
-func (p *ReverseProxy) webSocketUpgradeHandler(w http.ResponseWriter, r *http.Request, conn net.Conn) {
+func (p *ReverseProxy) webSocketUpgradeHandler(w http.ResponseWriter, r *http.Request, conn net.Conn, resp *http.Response) {
 	defer conn.Close()
 
 	hijacker, ok := w.(http.Hijacker)
@@ -163,9 +169,24 @@ func (p *ReverseProxy) webSocketUpgradeHandler(w http.ResponseWriter, r *http.Re
 	}
 	defer clientConn.Close()
 
-	response := "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n"
-	if _, err := clientConn.Write([]byte(response)); err != nil {
-		p.logger.Errorf("Failed to write upgrade response: %v", err)
+	responseLine := fmt.Sprintf("HTTP/1.1 %d %s\r\n", resp.StatusCode, resp.Status)
+	if _, err := clientConn.Write([]byte(responseLine)); err != nil {
+		p.logger.Errorf("Failed to write response line: %v", err)
+		return
+	}
+
+	for key, values := range resp.Header {
+		for _, value := range values {
+			headerLine := fmt.Sprintf("%s: %s\r\n", key, value)
+			if _, err := clientConn.Write([]byte(headerLine)); err != nil {
+				p.logger.Errorf("Failed to write header %s: %v", key, err)
+				return
+			}
+		}
+	}
+
+	if _, err := clientConn.Write([]byte("\r\n")); err != nil {
+		p.logger.Errorf("Failed to write header terminator: %v", err)
 		return
 	}
 
