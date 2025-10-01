@@ -25,6 +25,14 @@ routes:
       - path: /ws
     upstream:
       name: backend
+  - name: discovery
+    listener: http
+    matches:
+      - path: /discover
+    upstream:
+      discovery:
+        type: demo
+      service: header
 upstreams:
   - name: backend
     nodes:
