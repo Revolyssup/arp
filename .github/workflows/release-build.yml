@@ -1,0 +1,79 @@
+name: Build & Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'version'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    env:
+      BINARY_NAME: arp
+      PACKAGE_PATH: ./cmd
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Prepare build output folder
+        run: mkdir -p release
+
+      - name: Build linux/amd64
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          echo "Building ${BINARY_NAME} for linux/amd64 with version ${VERSION}"
+          GOOS=linux GOARCH=amd64 go build -o release/${BINARY_NAME}-linux-amd64 \
+            -ldflags "-s -w -X main.version=${VERSION}" ${PACKAGE_PATH}/main.go
+
+      - name: Build linux/arm64
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          echo "Building ${BINARY_NAME} for linux/arm64 with version ${VERSION}"
+          GOOS=linux GOARCH=arm64 go build -o release/${BINARY_NAME}-linux-arm64 \
+            -ldflags "-s -w -X main.version=${VERSION}" ${PACKAGE_PATH}/main.go
+
+      - name: List release artifacts
+        run: ls -la release
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        with:
+          tag_name: v${{ github.event.inputs.version }}
+          release_name: v${{ github.event.inputs.version }}
+          body: "Release v${{ github.event.inputs.version }}"
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload linux/amd64 asset
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: release/${{ env.BINARY_NAME }}-linux-amd64
+          asset_name: ${{ env.BINARY_NAME }}-v${{ github.event.inputs.version }}-linux-amd64
+          asset_content_type: application/octet-stream
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload linux/arm64 asset
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: release/${{ env.BINARY_NAME }}-linux-arm64
+          asset_name: ${{ env.BINARY_NAME }}-v${{ github.event.inputs.version }}-linux-arm64
+          asset_content_type: application/octet-stream
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
