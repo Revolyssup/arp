@@ -6,7 +6,6 @@ import (
 	"sync"
 
 	"github.com/Revolyssup/arp/pkg/config"
-	"github.com/Revolyssup/arp/pkg/discovery"
 	"github.com/Revolyssup/arp/pkg/types"
 )
 
@@ -21,22 +20,18 @@ type Upstream struct {
 	currentIndex int
 }
 
-type Factory struct {
-	discoveryManager *discovery.DiscoveryManager
-}
+type Factory struct{}
 
-func NewFactory(discoveryManager *discovery.DiscoveryManager) *Factory {
-	return &Factory{
-		discoveryManager: discoveryManager,
-	}
+func NewFactory() *Factory {
+	return &Factory{}
 }
 
 func (f *Factory) NewUpstream(upsConf config.UpstreamConfig) (*Upstream, error) {
-	return newUpstream(upsConf, f.discoveryManager)
+	return newUpstream(upsConf)
 }
 
 // TODO: Implement garbage collection for upstream related nodeevents and healthcheck
-func newUpstream(upsConf config.UpstreamConfig, discoveryManager *discovery.DiscoveryManager) (*Upstream, error) {
+func newUpstream(upsConf config.UpstreamConfig) (*Upstream, error) {
 	u := &Upstream{
 		name:   upsConf.Name,
 		lbType: upsConf.Type,
@@ -56,17 +51,19 @@ func newUpstream(upsConf config.UpstreamConfig, discoveryManager *discovery.Disc
 	}
 
 	// Initialize service discovery if configured
-	if upsConf.Discovery.Type != "" && discoveryManager != nil {
-		nodesEvent, err := discoveryManager.GetDiscovery(upsConf.Discovery, upsConf.Service)
-		if err != nil {
-			return nil, fmt.Errorf("failed to initialize discovery: %v", err)
-		}
-		go func() {
-			for nodes := range nodesEvent {
-				u.updateNodes(nodes)
-			}
-		}()
-	}
+	// if upsConf.Discovery.Type != "" && discoveryManager != nil {
+	// 	nodesEvent, err := discoveryManager.GetDiscovery(upsConf.Discovery, upsConf.Service)
+	// 	if err != nil {
+	// 		return nil, fmt.Errorf("failed to initialize discovery: %v", err)
+	// 	}
+	// 	utils.GoWithRecover(func() {
+	// 		for nodes := range nodesEvent {
+	// 			u.updateNodes(nodes)
+	// 		}
+	// 	}, func(a any) {
+	// 		errChan <- fmt.Errorf("panic in node update listener for upstream %s: %v", upsConf.Name, a)
+	// 	})
+	// }
 
 	return u, nil
 }
@@ -87,9 +84,13 @@ func (u *Upstream) SelectNode() *types.Node {
 	return nil // Unsupported load balancer type
 }
 
-func (u *Upstream) updateNodes(nodes []*types.Node) {
+func (u *Upstream) UpdateNodes(nodes []*types.Node) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	u.nodes = nodes
 	u.currentIndex = 0
+}
+
+func (u *Upstream) Name() string {
+	return u.name
 }

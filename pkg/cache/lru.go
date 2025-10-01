@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Revolyssup/arp/pkg/logger"
+	"github.com/Revolyssup/arp/pkg/utils"
 )
 
 type Node[T any] struct {
@@ -176,7 +177,7 @@ func (lru *LRUCache[T]) Set(key string, val T, ttl time.Duration) {
 
 	// TTL handling (same as before)
 	if ttl >= 0 {
-		go func(key string) {
+		utils.GoWithRecover(func() {
 			select {
 			case <-lru.ctx.Done():
 				lru.log.Debugf("context done, stopping TTL goroutine for key %s", key)
@@ -185,7 +186,8 @@ func (lru *LRUCache[T]) Set(key string, val T, ttl time.Duration) {
 				lru.log.Debugf("TTL expired for key %s, deleting from LRU Cache after %v", key, ttl)
 				lru.Delete(key)
 			}
-
-		}(key)
+		}, func(err any) {
+			lru.log.Infof("panic in LRU cache ttl goroutine: %v", err)
+		})
 	}
 }

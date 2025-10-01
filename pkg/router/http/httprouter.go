@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/Revolyssup/arp/pkg/config"
+	"github.com/Revolyssup/arp/pkg/discovery"
 	"github.com/Revolyssup/arp/pkg/logger"
 	"github.com/Revolyssup/arp/pkg/plugin"
 	"github.com/Revolyssup/arp/pkg/proxy"
@@ -13,24 +14,26 @@ import (
 )
 
 type Router struct {
-	pluginChain     []*plugin.Chain
-	pathMatcher     *route.PathMatcher
-	methodMatcher   *route.MethodMatcher
-	headerMatcher   *route.HeaderMatcher
-	upstreamFactory *upstream.Factory
-	logger          *logger.Logger
-	proxyService    *proxy.Service
+	pluginChain      []*plugin.Chain
+	discoveryManager *discovery.DiscoveryManager
+	pathMatcher      *route.PathMatcher
+	methodMatcher    *route.MethodMatcher
+	headerMatcher    *route.HeaderMatcher
+	upstreamFactory  *upstream.Factory
+	logger           *logger.Logger
+	proxyService     *proxy.Service
 }
 
-func NewRouter(listener string, routerFactory *route.Factory, upstreamFactory *upstream.Factory, parentLogger *logger.Logger) *Router {
+func NewRouter(listener string, routerFactory *route.Factory, upstreamFactory *upstream.Factory, discoveryManager *discovery.DiscoveryManager, parentLogger *logger.Logger) *Router {
 	return &Router{
-		pathMatcher:     route.NewPathMatcher(parentLogger),
-		methodMatcher:   route.NewMethodMatcher(),
-		headerMatcher:   route.NewHeaderMatcher(),
-		upstreamFactory: upstreamFactory,
-		pluginChain:     []*plugin.Chain{},
-		logger:          parentLogger.WithComponent("router"),
-		proxyService:    proxy.NewService(parentLogger),
+		pathMatcher:      route.NewPathMatcher(parentLogger),
+		methodMatcher:    route.NewMethodMatcher(),
+		headerMatcher:    route.NewHeaderMatcher(),
+		upstreamFactory:  upstreamFactory,
+		discoveryManager: discoveryManager,
+		pluginChain:      []*plugin.Chain{},
+		logger:           parentLogger.WithComponent("router"),
+		proxyService:     proxy.NewService(parentLogger),
 	}
 }
 
@@ -67,6 +70,17 @@ func (r *Router) UpdateRoutes(routeConfigs []config.RouteConfig, upstreamConfigs
 			return err
 		}
 
+		//init service discovery
+		if upstreamConfig.Discovery.Type != "" && r.discoveryManager != nil {
+			errChan := r.discoveryManager.InitDiscovery(up, r.discoveryManager, upstreamConfig.Discovery, upstreamConfig.Service)
+			go func() {
+				for err := range errChan {
+					if err != nil {
+						r.logger.Errorf("Error in discovery for upstream %s: %v", upstreamConfig.Name, err)
+					}
+				}
+			}()
+		}
 		pluginChain := plugin.NewChain()
 		for _, pCfg := range rc.Plugins {
 			if pluginMap[pCfg.Name] != nil {

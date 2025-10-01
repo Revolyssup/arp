@@ -13,6 +13,7 @@ import (
 	httprouter "github.com/Revolyssup/arp/pkg/router/http"
 	"github.com/Revolyssup/arp/pkg/types"
 	"github.com/Revolyssup/arp/pkg/upstream"
+	"github.com/Revolyssup/arp/pkg/utils"
 )
 
 type Listener struct {
@@ -25,21 +26,23 @@ type Listener struct {
 func NewListener(cfg config.ListenerConfig, discoveryManager *discovery.DiscoveryManager, eventBus *eventbus.EventBus[config.Dynamic], routerFactory *route.Factory, upstreamFactory *upstream.Factory, logger *logger.Logger) *Listener {
 	l := &Listener{
 		config: cfg,
-		router: httprouter.NewRouter(cfg.Name, routerFactory, upstreamFactory, logger),
+		router: httprouter.NewRouter(cfg.Name, routerFactory, upstreamFactory, discoveryManager, logger),
 		logger: logger,
 	}
 	l.server = &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.Port),
 		Handler: l.router,
 	}
-	go func() {
+	utils.GoWithRecover(func() {
 		for dynCfg := range eventBus.Subscribe(types.RouteEventKey(cfg.Name)) {
 			l.updateRoutes(dynCfg.Routes, dynCfg.Upstreams, dynCfg.Plugins)
 		}
 		for dynCfg := range eventBus.Subscribe(types.StreamRouteEventKey(cfg.Name)) {
 			l.updateStreamRoutes(dynCfg.StreamRoute, dynCfg.Upstreams, dynCfg.Plugins)
 		}
-	}()
+	}, func(a any) {
+		l.logger.Errorf("panic in route update listener for listener %s: %v", cfg.Name, a)
+	})
 	return l
 }
 

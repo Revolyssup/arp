@@ -12,6 +12,10 @@ io.Copy* doesn't immediately flush data to underlying responsewriter which is ne
 
 A very naive implementation of round tripper has been added which takes control of underlying socket and writes the generated upstream request directly to it. This will be improved in future. This roundtripper also reuses tcp connections which are also now maintained in a sync.Pool per ReverseProxy instance.
 
+## GoWithRecover and upstream-discovery refactor
+
+Inspired by traefik's internally used safe package, a helper function GoWithRecover is put in utils for error handling in cases of panic. Previous the upstream was importing discovery and the relationship was pretty messed up. Now all discovery related code is taken out of upstream package. Now upstream is a dependency of discovery and not the other way around.
+
 ## TODO
 
 - Better error handling and context passing.

@@ -27,3 +27,16 @@ func (p *Pool[T]) Get() T {
 func (p *Pool[T]) Put(item T) {
 	p.pool.Put(item)
 }
+
+// shamelessly inspired from traefik
+
+func GoWithRecover(fn func(), recoverFunc func(any)) {
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				recoverFunc(r)
+			}
+		}()
+		fn()
+	}()
+}

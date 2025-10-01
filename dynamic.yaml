@@ -28,13 +28,13 @@ routes:
 upstreams:
   - name: backend
     nodes:
-      - url: http://127.0.0.1:9090
+      - url: http://127.0.0.1:9090/ip
 plugins:
   - name: responsecache
     type: responsecache
     config:
-      ttl: 30
-      key: uri
+      ttl: 3
+      key: host
       size: 2
   - name: demo2
     type: demo

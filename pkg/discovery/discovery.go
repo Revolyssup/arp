@@ -2,13 +2,42 @@ package discovery
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/Revolyssup/arp/pkg/config"
 	"github.com/Revolyssup/arp/pkg/discovery/demo"
 	"github.com/Revolyssup/arp/pkg/eventbus"
 	"github.com/Revolyssup/arp/pkg/logger"
 	"github.com/Revolyssup/arp/pkg/types"
+	"github.com/Revolyssup/arp/pkg/upstream"
+	"github.com/Revolyssup/arp/pkg/utils"
 )
+
+func (d *DiscoveryManager) InitDiscovery(ups *upstream.Upstream, discoveryManager *DiscoveryManager, discoveryConf config.DiscoveryRef, serviceName string) chan error {
+	errChan := make(chan error, 1)
+	nodesEvent, err := discoveryManager.GetDiscovery(discoveryConf, serviceName)
+	if err != nil {
+		errChan <- fmt.Errorf("failed to initialize discovery: %v", err)
+		return errChan
+	}
+	var wg sync.WaitGroup
+	wg.Add(1)
+	defer wg.Done()
+	wg.Add(1)
+	utils.GoWithRecover(func() {
+		defer wg.Done()
+		for nodes := range nodesEvent {
+			ups.UpdateNodes(nodes)
+		}
+	}, func(a any) {
+		errChan <- fmt.Errorf("panic in node update listener for upstream %s: %v", ups.Name(), a)
+	})
+	go func() {
+		wg.Wait()
+		close(errChan)
+	}()
+	return errChan
+}
 
 // Manages all instantiated discovereres and based on the config, gives an event bus to client to subscribe on.
 type DiscoveryManager struct {

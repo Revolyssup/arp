@@ -17,6 +17,7 @@ import (
 	"github.com/Revolyssup/arp/pkg/logger"
 	"github.com/Revolyssup/arp/pkg/route"
 	"github.com/Revolyssup/arp/pkg/upstream"
+	"github.com/Revolyssup/arp/pkg/utils"
 	"github.com/Revolyssup/arp/pkg/watcher"
 	"gopkg.in/yaml.v3"
 )
@@ -100,7 +101,7 @@ func (a *ARP) init() error {
 		return fmt.Errorf("failed to initialize discovery manager: %w", err)
 	}
 	routeFactory := route.NewFactory()
-	upstreamFactory := upstream.NewFactory(discoveryManager)
+	upstreamFactory := upstream.NewFactory()
 
 	a.listeners = make(map[string]*listener.Listener)
 	for _, lc := range a.config.Listeners {
@@ -118,16 +119,21 @@ func (a *ARP) init() error {
 func (a *ARP) start(ctx context.Context) error {
 	a.wg.Add(1)
 	// Start configuration watcher
-	go func() {
+	utils.GoWithRecover(func() {
 		defer a.wg.Done()
 		a.watcher.Watch(ctx)
 		a.log.Info("Configuration watcher stopped")
-	}()
+	}, func(err any) {
+		a.log.Errorf("panic in configuration watcher: %v", err)
+	})
 
 	// Start listeners
 	for name, l := range a.listeners {
 		a.wg.Add(1)
-		go func(name string, l *listener.Listener) {
+		// for compatibility with older go versions
+		name := name
+		l := l
+		utils.GoWithRecover(func() {
 			defer a.wg.Done()
 			a.log.Infof("Starting listener: %s", name)
 
@@ -136,7 +142,9 @@ func (a *ARP) start(ctx context.Context) error {
 			} else {
 				a.log.Infof("Listener %s stopped", name)
 			}
-		}(name, l)
+		}, func(err any) {
+			a.log.Errorf("panic in listener %s: %v", name, err)
+		})
 	}
 
 	return nil
@@ -171,13 +179,18 @@ func (a *ARP) shutdown() {
 	var wg sync.WaitGroup
 	for name, l := range a.listeners {
 		wg.Add(1)
-		go func(name string, l *listener.Listener) {
+		// for compatibility with older go versions
+		name := name
+		l := l
+		utils.GoWithRecover(func() {
 			defer wg.Done()
 			a.log.Infof("Stopping listener: %s", name)
 			if err := l.Stop(shutdownCtx); err != nil {
 				a.log.Errorf("Error stopping listener %s: %v", name, err)
 			}
-		}(name, l)
+		}, func(err any) {
+			a.log.Errorf("panic while stopping listener %s: %v", name, err)
+		})
 	}
 
 	// Wait for all listeners to stop
