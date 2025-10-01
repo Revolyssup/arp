@@ -1,11 +1,5 @@
 package types
 
-import (
-	"net/url"
-
-	"github.com/Revolyssup/arp/pkg/eventbus"
-)
-
 //TODO: Do I need this types.go?
 
 func RouteEventKey(listenerName string) string {
@@ -18,13 +12,4 @@ func StreamRouteEventKey(listenerName string) string {
 
 func ServiceDiscoveryEventKey(typ string, serviceName string) string {
 	return "sd_" + typ + "_" + serviceName
-}
-
-type Node struct {
-	ServiceName string
-	URL         *url.URL
-}
-
-type Discovery interface {
-	Start(typ string, eb *eventbus.EventBus[[]*Node], config map[string]any) error
 }

@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/Revolyssup/arp/pkg/config"
-	"github.com/Revolyssup/arp/pkg/discovery"
+	"github.com/Revolyssup/arp/pkg/discovery/manager"
 	"github.com/Revolyssup/arp/pkg/logger"
 	"github.com/Revolyssup/arp/pkg/plugin"
 	"github.com/Revolyssup/arp/pkg/proxy"
@@ -15,7 +15,7 @@ import (
 
 type Router struct {
 	pluginChain      []*plugin.Chain
-	discoveryManager *discovery.DiscoveryManager
+	discoveryManager *manager.DiscoveryManager
 	pathMatcher      *route.PathMatcher
 	methodMatcher    *route.MethodMatcher
 	headerMatcher    *route.HeaderMatcher
@@ -24,7 +24,7 @@ type Router struct {
 	proxyService     *proxy.Service
 }
 
-func NewRouter(listener string, routerFactory *route.Factory, upstreamFactory *upstream.Factory, discoveryManager *discovery.DiscoveryManager, parentLogger *logger.Logger) *Router {
+func NewRouter(listener string, routerFactory *route.Factory, upstreamFactory *upstream.Factory, discoveryManager *manager.DiscoveryManager, parentLogger *logger.Logger) *Router {
 	return &Router{
 		pathMatcher:      route.NewPathMatcher(parentLogger),
 		methodMatcher:    route.NewMethodMatcher(),

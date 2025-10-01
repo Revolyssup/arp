@@ -4,21 +4,23 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/Revolyssup/arp/pkg/discovery"
 	"github.com/Revolyssup/arp/pkg/eventbus"
 	"github.com/Revolyssup/arp/pkg/logger"
 	"github.com/Revolyssup/arp/pkg/types"
+	"github.com/Revolyssup/arp/pkg/upstream"
 )
 
-func New(cfg map[string]any, log *logger.Logger) types.Discovery {
+func New(cfg map[string]any, log *logger.Logger) discovery.Discovery {
 	return &DemoDiscovery{
-		eb:  eventbus.NewEventBus[[]*types.Node](log.WithComponent("demo_discovery")),
+		eb:  eventbus.NewEventBus[[]*upstream.Node](log.WithComponent("demo_discovery")),
 		cfg: cfg,
 		log: log.WithComponent("demo_discovery"),
 	}
 }
 
 type DemoDiscovery struct {
-	eb  *eventbus.EventBus[[]*types.Node]
+	eb  *eventbus.EventBus[[]*upstream.Node]
 	cfg map[string]any
 	log *logger.Logger
 }
@@ -27,10 +29,10 @@ const (
 	DemoServiceAddress = "localhost:9090"
 )
 
-func (d *DemoDiscovery) Start(name string, eb *eventbus.EventBus[[]*types.Node], cfg map[string]any) error {
+func (d *DemoDiscovery) Start(name string, eb *eventbus.EventBus[[]*upstream.Node], cfg map[string]any) error {
 	d.log.Infof("Starting demo discovery with config: %v", cfg)
 	// For demo purposes, we will just publish a static list of nodes every 10 seconds.
-	nodes := []*types.Node{
+	nodes := []*upstream.Node{
 		{
 			ServiceName: "header",
 			URL:         &url.URL{Scheme: "http", Host: DemoServiceAddress, Path: "/headers"},
@@ -48,8 +50,8 @@ func (d *DemoDiscovery) Start(name string, eb *eventbus.EventBus[[]*types.Node],
 	}
 	go func() {
 		// simulate pushing updated nodes every t seconds with same servername and url
-		eb.Publish(types.ServiceDiscoveryEventKey(name, "header"), []*types.Node{nodes[0]})
-		eb.Publish(types.ServiceDiscoveryEventKey(name, "ip"), []*types.Node{nodes[1]})
+		eb.Publish(types.ServiceDiscoveryEventKey(name, "header"), []*upstream.Node{nodes[0]})
+		eb.Publish(types.ServiceDiscoveryEventKey(name, "ip"), []*upstream.Node{nodes[1]})
 		time.Sleep(t)
 	}()
 	return nil

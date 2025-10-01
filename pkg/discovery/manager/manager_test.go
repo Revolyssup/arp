@@ -1,4 +1,4 @@
-package discovery
+package manager
 
 import (
 	"testing"
@@ -18,7 +18,7 @@ var discoveryManager, _ = NewDiscoveryManager([]config.DiscoveryConfig{
 	},
 }, logger.New(logger.LevelInfo))
 
-func TestUpstreamWithDiscovery(t *testing.T) {
+func TestUpstreamWithDemoDiscovery(t *testing.T) {
 
 	upstreamFactory := upstream.NewFactory()
 	ipupConf := config.UpstreamConfig{

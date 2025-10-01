@@ -6,7 +6,7 @@ import (
 	"net/http"
 
 	"github.com/Revolyssup/arp/pkg/config"
-	"github.com/Revolyssup/arp/pkg/discovery"
+	"github.com/Revolyssup/arp/pkg/discovery/manager"
 	"github.com/Revolyssup/arp/pkg/eventbus"
 	"github.com/Revolyssup/arp/pkg/logger"
 	"github.com/Revolyssup/arp/pkg/route"
@@ -23,7 +23,7 @@ type Listener struct {
 	logger *logger.Logger
 }
 
-func NewListener(cfg config.ListenerConfig, discoveryManager *discovery.DiscoveryManager, eventBus *eventbus.EventBus[config.Dynamic], routerFactory *route.Factory, upstreamFactory *upstream.Factory, logger *logger.Logger) *Listener {
+func NewListener(cfg config.ListenerConfig, discoveryManager *manager.DiscoveryManager, eventBus *eventbus.EventBus[config.Dynamic], routerFactory *route.Factory, upstreamFactory *upstream.Factory, logger *logger.Logger) *Listener {
 	l := &Listener{
 		config: cfg,
 		router: httprouter.NewRouter(cfg.Name, routerFactory, upstreamFactory, discoveryManager, logger),

@@ -6,7 +6,6 @@ import (
 	"sync"
 
 	"github.com/Revolyssup/arp/pkg/config"
-	"github.com/Revolyssup/arp/pkg/types"
 )
 
 const LoadBalancerRoundRobin = "round_robin"
@@ -14,10 +13,14 @@ const LoadBalancerRoundRobin = "round_robin"
 type Upstream struct {
 	name   string
 	lbType string
-	nodes  []*types.Node
+	nodes  []*Node
 	mu     sync.RWMutex
 	// For load balancing
 	currentIndex int
+}
+type Node struct {
+	ServiceName string
+	URL         *url.URL
 }
 
 type Factory struct{}
@@ -45,14 +48,14 @@ func newUpstream(upsConf config.UpstreamConfig) (*Upstream, error) {
 		if err != nil {
 			return nil, fmt.Errorf("invalid node URL %s: %v", nodeConfig.URL, err)
 		}
-		u.nodes = append(u.nodes, &types.Node{
+		u.nodes = append(u.nodes, &Node{
 			URL: parsedURL,
 		})
 	}
 	return u, nil
 }
 
-func (u *Upstream) SelectNode() *types.Node {
+func (u *Upstream) SelectNode() *Node {
 	u.mu.RLock()
 	defer u.mu.RUnlock()
 
@@ -68,7 +71,7 @@ func (u *Upstream) SelectNode() *types.Node {
 	return nil // Unsupported load balancer type
 }
 
-func (u *Upstream) UpdateNodes(nodes []*types.Node) {
+func (u *Upstream) UpdateNodes(nodes []*Node) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	u.nodes = nodes

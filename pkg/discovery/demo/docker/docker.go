@@ -4,8 +4,9 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/Revolyssup/arp/pkg/discovery"
 	"github.com/Revolyssup/arp/pkg/eventbus"
-	"github.com/Revolyssup/arp/pkg/types"
+	"github.com/Revolyssup/arp/pkg/upstream"
 	"github.com/moby/moby/client"
 )
 
@@ -16,7 +17,7 @@ type DockerDiscovery struct {
 	cancel context.CancelFunc
 }
 
-func New(cfg map[string]any) (types.Discovery, error) {
+func New(cfg map[string]any) (discovery.Discovery, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
@@ -33,6 +34,6 @@ func New(cfg map[string]any) (types.Discovery, error) {
 }
 
 // TODO: Implement actual discovery logic
-func (d *DockerDiscovery) Start(name string, eb *eventbus.EventBus[[]*types.Node], config map[string]any) error {
+func (d *DockerDiscovery) Start(name string, eb *eventbus.EventBus[[]*upstream.Node], config map[string]any) error {
 	return nil
 }

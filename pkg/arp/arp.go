@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/Revolyssup/arp/pkg/config"
-	"github.com/Revolyssup/arp/pkg/discovery"
+	"github.com/Revolyssup/arp/pkg/discovery/manager"
 	"github.com/Revolyssup/arp/pkg/eventbus"
 	"github.com/Revolyssup/arp/pkg/listener"
 	"github.com/Revolyssup/arp/pkg/logger"
@@ -96,7 +96,7 @@ func (a *ARP) Run(ctx context.Context) error {
 func (a *ARP) init() error {
 	configBus := eventbus.NewEventBus[config.Dynamic](a.log.WithComponent("config_bus"))
 
-	discoveryManager, err := discovery.NewDiscoveryManager(a.config.DiscoveryConfigs, a.log)
+	discoveryManager, err := manager.NewDiscoveryManager(a.config.DiscoveryConfigs, a.log)
 	if err != nil {
 		return fmt.Errorf("failed to initialize discovery manager: %w", err)
 	}
