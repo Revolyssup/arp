@@ -168,6 +168,6 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	wrappedWriter := route.Plugins.HandleResponse(req, w)
-	proxy := proxy.NewReverseProxy(r.logger, r.proxyService)
-	proxy.ServeHTTP(wrappedWriter, req, node.URL)
+	proxy := proxy.NewReverseProxy(r.logger, r.proxyService, node.URL)
+	proxy.ServeHTTP(wrappedWriter, req)
 }

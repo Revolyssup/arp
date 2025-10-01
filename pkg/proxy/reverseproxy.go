@@ -1,11 +1,14 @@
 package proxy
 
 import (
+	"bufio"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 
 	"github.com/Revolyssup/arp/pkg/logger"
 	"github.com/Revolyssup/arp/pkg/utils"
@@ -13,7 +16,7 @@ import (
 
 const bufferSize = 32 * 1024
 
-// Per ARP instance - to be used to manage state across requests like connection pool and reusable buffers
+// Service remains the same
 type Service struct {
 	buf *utils.Pool[[]byte]
 	log *logger.Logger
@@ -28,18 +31,158 @@ func NewService(log *logger.Logger) *Service {
 	}
 }
 
-type ReverseProxy struct {
-	transport http.RoundTripper
-	logger    *logger.Logger
-	service   *Service
+type UpgradeHandler func(http.ResponseWriter, *http.Request, net.Conn)
+
+type ConnPool struct {
+	target *url.URL
+	pool   *utils.Pool[net.Conn]
+	logger *logger.Logger
 }
 
-func NewReverseProxy(logger *logger.Logger, rp *Service) *ReverseProxy {
-	return &ReverseProxy{
-		transport: &http.Transport{},
-		logger:    logger.WithComponent("reverse_proxy"),
-		service:   rp,
+func NewConnPool(target *url.URL, logger *logger.Logger) *ConnPool {
+	return &ConnPool{
+		target: target,
+		pool: utils.NewPool(func() net.Conn {
+			//TODO: Is it a good idea to ignore error here?
+			conn, _ := net.Dial("tcp", target.Host)
+			return conn
+		}),
+		logger: logger.WithComponent("conn_pool"),
 	}
+}
+
+func (p *ConnPool) Get() (net.Conn, error) {
+	conn := p.pool.Get()
+	if conn == nil {
+		return nil, fmt.Errorf("failed to create connection to %s", p.target.Host)
+	}
+	return conn, nil
+}
+
+func (p *ConnPool) Put(conn net.Conn) {
+	p.pool.Put(conn)
+}
+
+type ReverseProxy struct {
+	logger    *logger.Logger
+	service   *Service
+	connPool  *ConnPool
+	targetURL *url.URL
+}
+
+func NewReverseProxy(logger *logger.Logger, service *Service, targetURL *url.URL) *ReverseProxy {
+	return &ReverseProxy{
+		logger:    logger.WithComponent("reverse_proxy"),
+		service:   service,
+		connPool:  NewConnPool(targetURL, logger),
+		targetURL: targetURL,
+	}
+}
+
+func (p *ReverseProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	upstreamReq := r.Clone(r.Context())
+	upstreamReq.URL.Scheme = p.targetURL.Scheme
+	upstreamReq.URL.Host = p.targetURL.Host
+	removeHopHeaders(upstreamReq.Header)
+
+	var upgradeHandler UpgradeHandler
+	if isWebSocketUpgrade(r) {
+		upgradeHandler = p.webSocketUpgradeHandler
+	}
+
+	p.roundTrip(w, r, upstreamReq, upgradeHandler)
+}
+
+// Custom round trip implementation
+func (p *ReverseProxy) roundTrip(w http.ResponseWriter, r *http.Request, upstreamReq *http.Request, upgradeHandler UpgradeHandler) {
+	conn, err := p.connPool.Get()
+	if err != nil {
+		p.logger.Errorf("Failed to get connection from pool: %v", err)
+		http.Error(w, "Bad Gateway", http.StatusBadGateway)
+		return
+	}
+
+	// we don't need to put back long lived connections like WebSocket for now.
+	if upgradeHandler == nil {
+		defer p.connPool.Put(conn)
+	}
+
+	if err := upstreamReq.Write(conn); err != nil {
+		p.logger.Errorf("Failed to write request to connection: %v", err)
+		http.Error(w, "Bad Gateway", http.StatusBadGateway)
+		return
+	}
+
+	p.handleResponse(conn, w, r, upgradeHandler)
+}
+
+func (p *ReverseProxy) handleResponse(conn net.Conn, w http.ResponseWriter, r *http.Request, upgradeHandler UpgradeHandler) {
+	reader := bufio.NewReader(conn)
+	resp, err := http.ReadResponse(reader, r)
+	if err != nil {
+		p.logger.Errorf("Failed to read response: %v", err)
+		http.Error(w, "Bad Gateway", http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusSwitchingProtocols && upgradeHandler != nil {
+		upgradeHandler(w, r, conn)
+		return
+	}
+
+	for k, v := range resp.Header {
+		w.Header()[k] = v
+	}
+	w.WriteHeader(resp.StatusCode)
+
+	if isStreamingResponse(resp) {
+		p.copyAndFlush(w, resp.Body, bufferSize)
+	} else {
+		buf := p.service.buf.Get()
+		defer p.service.buf.Put(buf)
+		io.CopyBuffer(w, resp.Body, buf)
+	}
+}
+
+func (p *ReverseProxy) webSocketUpgradeHandler(w http.ResponseWriter, r *http.Request, conn net.Conn) {
+	defer conn.Close()
+
+	hijacker, ok := w.(http.Hijacker)
+	if !ok {
+		p.logger.Error("Hijacking not supported")
+		http.Error(w, "Hijacking not supported", http.StatusInternalServerError)
+		return
+	}
+
+	clientConn, _, err := hijacker.Hijack()
+	if err != nil {
+		p.logger.Errorf("Failed to hijack connection: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer clientConn.Close()
+
+	response := "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n"
+	if _, err := clientConn.Write([]byte(response)); err != nil {
+		p.logger.Errorf("Failed to write upgrade response: %v", err)
+		return
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		io.Copy(conn, clientConn)
+	}()
+
+	go func() {
+		defer wg.Done()
+		io.Copy(clientConn, conn)
+	}()
+
+	wg.Wait()
 }
 
 func (p *ReverseProxy) copyAndFlush(dst http.ResponseWriter, src io.Reader, bufferSize int) {
@@ -52,7 +195,6 @@ func (p *ReverseProxy) copyAndFlush(dst http.ResponseWriter, src io.Reader, buff
 				break
 			}
 
-			// Flush if supported
 			if hasFlusher {
 				flusher.Flush()
 			}
@@ -67,39 +209,21 @@ func (p *ReverseProxy) copyAndFlush(dst http.ResponseWriter, src io.Reader, buff
 	}
 }
 
-func (p *ReverseProxy) ServeHTTP(w http.ResponseWriter, r *http.Request, target *url.URL) {
-	if isWebSocketUpgrade(r) {
-		p.serveWebSocket(w, r, target)
-		return
+func removeHopHeaders(header http.Header) {
+	hopHeaders := []string{
+		"Connection", "Proxy-Connection", "Keep-Alive", "Proxy-Authenticate",
+		"Proxy-Authorization", "Te", "Trailer", "Transfer-Encoding", "Upgrade",
 	}
-
-	upstreamReq := r.Clone(r.Context())
-	upstreamReq.URL.Scheme = target.Scheme
-	upstreamReq.URL.Host = target.Host
-	removeHopHeaders(upstreamReq.Header)
-	resp, err := p.transport.RoundTrip(upstreamReq)
-	if err != nil {
-		http.Error(w, "Bad Gateway", http.StatusBadGateway)
-		return
-	}
-	defer resp.Body.Close()
-
-	for k, v := range resp.Header {
-		w.Header()[k] = v
-	}
-	w.WriteHeader(resp.StatusCode)
-	if isStreamingResponse(resp) {
-		//TODO: figure out proper buffer size for streaming.
-		// This hardcoding if bad and temporary and added to test out that streaming works
-		p.copyAndFlush(w, resp.Body, 1)
-	} else {
-		buf := p.service.buf.Get()
-		io.CopyBuffer(w, resp.Body, buf)
-		defer p.service.buf.Put(buf)
+	for _, h := range hopHeaders {
+		header.Del(h)
 	}
 }
 
-// TODO: improve detection of streaming responses
+func isWebSocketUpgrade(r *http.Request) bool {
+	return strings.ToLower(r.Header.Get("Upgrade")) == "websocket" &&
+		strings.Contains(strings.ToLower(r.Header.Get("Connection")), "upgrade")
+}
+
 func isStreamingResponse(resp *http.Response) bool {
 	// Check for chunked transfer encoding
 	if resp.TransferEncoding != nil {
@@ -111,56 +235,14 @@ func isStreamingResponse(resp *http.Response) bool {
 	}
 	// Check for specific content types that typically stream
 	contentType := resp.Header.Get("Content-Type")
-	return strings.Contains(contentType, "text/event-stream")
-}
-
-func isWebSocketUpgrade(r *http.Request) bool {
-	return strings.ToLower(r.Header.Get("Upgrade")) == "websocket" &&
-		strings.Contains(strings.ToLower(r.Header.Get("Connection")), "upgrade")
-}
-
-func (p *ReverseProxy) serveWebSocket(w http.ResponseWriter, r *http.Request, target *url.URL) {
-	hijacker, ok := w.(http.Hijacker)
-	if !ok {
-		http.Error(w, "Hijacking not supported", http.StatusInternalServerError)
-		return
+	streamingTypes := []string{
+		"text/event-stream",
+		"application/stream+json",
 	}
-
-	clientConn, _, err := hijacker.Hijack()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+	for _, streamType := range streamingTypes {
+		if strings.Contains(contentType, streamType) {
+			return true
+		}
 	}
-	defer clientConn.Close()
-
-	// Prepare the upstream WebSocket request
-	upstreamReq := r.Clone(r.Context())
-	upstreamReq.URL.Scheme = target.Scheme
-	upstreamReq.URL.Host = target.Host
-
-	upstreamConn, err := net.Dial("tcp", target.Host)
-	if err != nil {
-		http.Error(w, "Cannot connect to upstream", http.StatusBadGateway)
-		return
-	}
-	defer upstreamConn.Close()
-
-	if err := upstreamReq.Write(upstreamConn); err != nil {
-		http.Error(w, "Error writing to upstream", http.StatusBadGateway)
-		return
-	}
-
-	//TODO: decouple response handling from request handling in custom roundtripper
-	go io.Copy(upstreamConn, clientConn)
-	io.Copy(clientConn, upstreamConn)
-}
-
-func removeHopHeaders(header http.Header) {
-	hopHeaders := []string{
-		"Connection", "Proxy-Connection", "Keep-Alive", "Proxy-Authenticate",
-		"Proxy-Authorization", "Te", "Trailer", "Transfer-Encoding", "Upgrade",
-	}
-	for _, h := range hopHeaders {
-		header.Del(h)
-	}
+	return false
 }
