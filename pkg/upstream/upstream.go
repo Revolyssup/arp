@@ -49,22 +49,6 @@ func newUpstream(upsConf config.UpstreamConfig) (*Upstream, error) {
 			URL: parsedURL,
 		})
 	}
-
-	// Initialize service discovery if configured
-	// if upsConf.Discovery.Type != "" && discoveryManager != nil {
-	// 	nodesEvent, err := discoveryManager.GetDiscovery(upsConf.Discovery, upsConf.Service)
-	// 	if err != nil {
-	// 		return nil, fmt.Errorf("failed to initialize discovery: %v", err)
-	// 	}
-	// 	utils.GoWithRecover(func() {
-	// 		for nodes := range nodesEvent {
-	// 			u.updateNodes(nodes)
-	// 		}
-	// 	}, func(a any) {
-	// 		errChan <- fmt.Errorf("panic in node update listener for upstream %s: %v", upsConf.Name, a)
-	// 	})
-	// }
-
 	return u, nil
 }
 
