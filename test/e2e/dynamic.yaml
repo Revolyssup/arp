@@ -8,7 +8,7 @@ routes:
   - name: slowheaders
     listener: http
     matches:
-      - path: /headers
+      - path: /slowheaders
     upstream:
       name: backend
     plugins:

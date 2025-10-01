@@ -4,17 +4,21 @@ routes:
     matches:
       - path: /headers
     upstream:
-      discovery:
-        type: demo
-      service: header
+      name: backend
   - name: slowheaders
     listener: http
     matches:
-      - path: /headers
+      - path: /slowheaders
     upstream:
       name: backend
     plugins:
       - name: responsecache
+  - name: stream
+    listener: http
+    matches:
+      - path: /stream
+    upstream:
+      name: backend
   - name: websocket
     listener: http2
     matches:

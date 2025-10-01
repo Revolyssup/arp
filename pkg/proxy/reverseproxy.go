@@ -97,10 +97,8 @@ func (p *ReverseProxy) roundTrip(w http.ResponseWriter, r *http.Request, upstrea
 	}
 	var upgradeHandler UpgradeHandler
 	if isWebSocketUpgrade(r) {
-		fmt.Println(r.Header)
 		upgradeHandler = p.webSocketUpgradeHandler
 	} else {
-		fmt.Println("REMOVING HOP HEADERS")
 		//TODO: fixme: removeHopHeaders unconditionally and add new for specific upgradehandler
 		removeHopHeaders(upstreamReq.Header)
 	}

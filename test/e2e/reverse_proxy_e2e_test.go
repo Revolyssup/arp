@@ -146,11 +146,7 @@ var _ = Describe("ReverseProxy End-to-End Tests", Ordered, func() {
 	Describe("WebSocket handling", func() {
 		It("should proxy WebSocket connections correctly", func() {
 			By("Connecting to WebSocket endpoint via reverse proxy")
-
-			// The reverse proxy should be listening on port 9090 for WebSocket connections
-			// based on your websocat command: websocat ws://localhost:8081/ws
 			wsURL := "ws://localhost:8081/ws"
-
 			conn, resp, err := websocket.DefaultDialer.Dial(wsURL, nil)
 			Expect(err).NotTo(HaveOccurred())
 			defer conn.Close()
@@ -166,7 +162,7 @@ var _ = Describe("ReverseProxy End-to-End Tests", Ordered, func() {
 			messageType, message, err := conn.ReadMessage()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(messageType).To(Equal(websocket.TextMessage))
-			Expect(string(message)).To(Equal("hello")) // Based on your observed behavior
+			Expect(string(message)).To(Equal("hello"))
 		})
 
 		It("should handle multiple WebSocket messages", func() {
@@ -268,6 +264,85 @@ var _ = Describe("ReverseProxy End-to-End Tests", Ordered, func() {
 			// Should be able to close without errors
 			err = conn.Close()
 			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+	Describe("Response caching", func() {
+		It("should cache responses and return cached responses faster", func() {
+			client := &http.Client{Timeout: 10 * time.Second}
+
+			// First request - should be slow
+			By("Making first request to slow endpoint")
+			start1 := time.Now()
+			resp1, err := client.Get("http://localhost:8080/slowheaders")
+			duration1 := time.Since(start1)
+			Expect(err).NotTo(HaveOccurred())
+			defer resp1.Body.Close()
+
+			Expect(resp1.StatusCode).To(Equal(http.StatusOK))
+
+			body1, err := io.ReadAll(resp1.Body)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(body1)).To(ContainSubstring("httpbin"))
+
+			// Verify first request took significant time (close to 2 seconds)
+			Expect(duration1).To(BeNumerically(">=", 1900*time.Millisecond),
+				"First request should take at least 1.9 seconds")
+			Expect(duration1).To(BeNumerically("<=", 3000*time.Millisecond),
+				"First request should not take more than 3 seconds")
+
+			// Second request - should be much faster (cached)
+			By("Making second request to same slow endpoint")
+			start2 := time.Now()
+			resp2, err := client.Get("http://localhost:8080/slowheaders")
+			duration2 := time.Since(start2)
+			Expect(err).NotTo(HaveOccurred())
+			defer resp2.Body.Close()
+
+			Expect(resp2.StatusCode).To(Equal(http.StatusOK))
+
+			body2, err := io.ReadAll(resp2.Body)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(body2)).To(ContainSubstring("httpbin"))
+
+			// Verify second request was significantly faster
+			Expect(duration2).To(BeNumerically("<", 500*time.Millisecond),
+				"Second request should be much faster (cached)")
+
+			// Verify responses are identical
+			Expect(body2).To(Equal(body1), "Cached response should be identical to first response")
+
+			// Log the performance improvement
+			improvement := float64(duration1-duration2) / float64(time.Millisecond)
+			GinkgoWriter.Printf("Caching improvement: first request=%v, second request=%v, improvement=%.2fms\n",
+				duration1, duration2, improvement)
+		})
+
+		It("should handle cache for different URLs independently", func() {
+			client := &http.Client{Timeout: 10 * time.Second}
+			resp1, err := client.Get("http://localhost:8080/slowheaders")
+			Expect(err).NotTo(HaveOccurred())
+			resp1.Body.Close()
+
+			// Request to slow endpoint with different uri
+			start2 := time.Now()
+			resp2, err := client.Get("http://localhost:8080/slowheaders?param=different")
+			duration2 := time.Since(start2)
+			Expect(err).NotTo(HaveOccurred())
+			resp2.Body.Close()
+
+			// Second different endpoint should also be slow (not cached)
+			Expect(duration2).To(BeNumerically(">=", 1900*time.Millisecond),
+				"Different URL should not be cached")
+
+			// Now request first endpoint again - should be fast
+			start3 := time.Now()
+			resp3, err := client.Get("http://localhost:8080/slowheaders")
+			duration3 := time.Since(start3)
+			Expect(err).NotTo(HaveOccurred())
+			resp3.Body.Close()
+
+			Expect(duration3).To(BeNumerically("<", 500*time.Millisecond),
+				"Original URL should still be cached")
 		})
 	})
 })
