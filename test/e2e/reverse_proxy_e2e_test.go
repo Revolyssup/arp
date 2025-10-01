@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -202,7 +203,7 @@ var _ = Describe("ReverseProxy End-to-End Tests", Ordered, func() {
 		It("should handle concurrent WebSocket connections", func() {
 			const concurrentConnections = 3
 			errors := make(chan error, concurrentConnections)
-			successCount := 0
+			var successCount int32
 
 			for i := 0; i < concurrentConnections; i++ {
 				go func(id int) {
@@ -228,22 +229,20 @@ var _ = Describe("ReverseProxy End-to-End Tests", Ordered, func() {
 						return
 					}
 
-					successCount++
+					atomic.AddInt32(&successCount, 1)
 					errors <- nil
 				}(i)
 			}
 
-			// Collect results
 			for i := 0; i < concurrentConnections; i++ {
 				err := <-errors
-				if err == nil {
-					successCount++
-				} else {
+				if err != nil {
 					GinkgoWriter.Printf("WebSocket connection error: %v\n", err)
 				}
 			}
 
-			Expect(successCount).To(BeNumerically(">=", concurrentConnections/2),
+			final := int(atomic.LoadInt32(&successCount))
+			Expect(final).To(BeNumerically(">=", concurrentConnections/2),
 				"At least half of concurrent WebSocket connections should succeed")
 		})
 
