@@ -10,6 +10,8 @@ import (
 	"github.com/Revolyssup/arp/pkg/plugin/types"
 )
 
+// TODO: fixme: The underlying cache is destroyed when plugin is updated. So on configuration updates, the cache is lost.
+// Should this cache be taken out of the plugin instance and be part of httprouter or some global cache manager?
 type ResponseCache struct {
 	config types.PluginConf
 	cache  *cache.LRUCache[[]byte]
