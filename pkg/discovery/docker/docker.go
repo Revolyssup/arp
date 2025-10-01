@@ -34,6 +34,6 @@ func New(cfg map[string]any) (discovery.Discovery, error) {
 }
 
 // TODO: Implement actual discovery logic
-func (d *DockerDiscovery) Start(name string, eb *eventbus.EventBus[[]*upstream.Node], config map[string]any) error {
+func (d *DockerDiscovery) Start(ctx context.Context, name string, eb *eventbus.EventBus[[]*upstream.Node], config map[string]any) error {
 	return nil
 }

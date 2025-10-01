@@ -1,6 +1,7 @@
 package manager
 
 import (
+	"context"
 	"fmt"
 	"sync"
 
@@ -21,31 +22,35 @@ type DiscoveryManager struct {
 	log         *logger.Logger
 }
 
-func NewDiscoveryManager(cfg []config.DiscoveryConfig, parentLogger *logger.Logger) (*DiscoveryManager, error) {
+func NewDiscoveryManager(parentLogger *logger.Logger) (*DiscoveryManager, error) {
 	discoveryLogger := parentLogger.WithComponent("discovery_manager")
 	mgr := &DiscoveryManager{
 		discoverers: make(map[string]discovery.Discovery),
 		eb:          eventbus.NewEventBus[[]*upstream.Node](discoveryLogger),
 		log:         discoveryLogger,
 	}
+	return mgr, nil
+}
+
+func (d *DiscoveryManager) InitDiscovery(ctx context.Context, cfg []config.DiscoveryConfig) error {
 	// Start all discoverers from cfg
 	//TODO: Refactor this into registration based data flow.
 	for _, dcfg := range cfg {
 		switch dcfg.Type {
 		case "demo":
-			mgr.discoverers["demo"] = demo.New(dcfg.Config, parentLogger)
+			d.discoverers["demo"] = demo.New(dcfg.Config, d.log)
 		default:
-			return nil, fmt.Errorf("unsupported discovery type: %s", dcfg.Type)
+			return fmt.Errorf("unsupported discovery type: %s", dcfg.Type)
 		}
-		mgr.log.Infof("Starting discovery with config: %v", dcfg)
-		if err := mgr.discoverers[dcfg.Type].Start(dcfg.Type, mgr.eb, dcfg.Config); err != nil {
-			return nil, fmt.Errorf("failed to start discovery %s: %w", dcfg.Type, err)
+		d.log.Infof("Starting discovery with config: %v", dcfg)
+		if err := d.discoverers[dcfg.Type].Start(ctx, dcfg.Type, d.eb, dcfg.Config); err != nil {
+			return fmt.Errorf("failed to start discovery %s: %w", dcfg.Type, err)
 		}
 	}
-	return mgr, nil
+	return nil
 }
 
-func (d *DiscoveryManager) GetDiscovery(config config.DiscoveryRef, serviceName string) (<-chan []*upstream.Node, error) {
+func (d *DiscoveryManager) getDiscovery(config config.DiscoveryRef, serviceName string) (<-chan []*upstream.Node, error) {
 	d.log.Warnf("discoverers %v", d)
 	if _, exists := d.discoverers[config.Type]; exists {
 		return d.eb.Subscribe(types.ServiceDiscoveryEventKey(config.Type, serviceName)), nil
@@ -53,9 +58,9 @@ func (d *DiscoveryManager) GetDiscovery(config config.DiscoveryRef, serviceName 
 	return nil, fmt.Errorf("unsupported discovery type: %s", config.Type)
 }
 
-func (d *DiscoveryManager) InitDiscovery(ups *upstream.Upstream, discoveryManager *DiscoveryManager, discoveryConf config.DiscoveryRef, serviceName string) chan error {
+func (d *DiscoveryManager) GetDiscovery(ups *upstream.Upstream, discoveryManager *DiscoveryManager, discoveryConf config.DiscoveryRef, serviceName string) chan error {
 	errChan := make(chan error, 1)
-	nodesEvent, err := discoveryManager.GetDiscovery(discoveryConf, serviceName)
+	nodesEvent, err := discoveryManager.getDiscovery(discoveryConf, serviceName)
 	if err != nil {
 		errChan <- fmt.Errorf("failed to initialize discovery: %v", err)
 		return errChan

@@ -9,14 +9,15 @@ import (
 	"github.com/Revolyssup/arp/pkg/upstream"
 )
 
-var discoveryManager, _ = NewDiscoveryManager([]config.DiscoveryConfig{
+var discoveryManager, _ = NewDiscoveryManager(logger.New(logger.LevelInfo))
+var conf = []config.DiscoveryConfig{
 	{
 		Type: "demo",
 		Config: map[string]any{
 			"interval": "1s",
 		},
 	},
-}, logger.New(logger.LevelInfo))
+}
 
 func TestUpstreamWithDemoDiscovery(t *testing.T) {
 
@@ -43,7 +44,8 @@ func TestUpstreamWithDemoDiscovery(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create upstream with discovery: %v", err)
 	}
-	discoveryManager.InitDiscovery(headerup, discoveryManager, headerupConf.Discovery, headerupConf.Service)
+	discoveryManager.InitDiscovery(t.Context(), conf)
+
 	if headerup == nil {
 		t.Fatal("Expected upstream to be non-nil")
 	}
@@ -56,7 +58,7 @@ func TestUpstreamWithDemoDiscovery(t *testing.T) {
 	if up == nil {
 		t.Fatal("Expected upstream to be non-nil")
 	}
-	discoveryManager.InitDiscovery(up, discoveryManager, ipupConf.Discovery, ipupConf.Service)
+	discoveryManager.InitDiscovery(t.Context(), conf)
 	time.Sleep(1 * time.Second) // wait for discovery to populate nodes
 	//first try
 	firstNode := up.SelectNode()

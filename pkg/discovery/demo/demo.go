@@ -1,6 +1,7 @@
 package demo
 
 import (
+	"context"
 	"net/url"
 	"time"
 
@@ -29,7 +30,7 @@ const (
 	DemoServiceAddress = "localhost:9090"
 )
 
-func (d *DemoDiscovery) Start(name string, eb *eventbus.EventBus[[]*upstream.Node], cfg map[string]any) error {
+func (d *DemoDiscovery) Start(ctx context.Context, name string, eb *eventbus.EventBus[[]*upstream.Node], cfg map[string]any) error {
 	d.log.Infof("Starting demo discovery with config: %v", cfg)
 	// For demo purposes, we will just publish a static list of nodes every 10 seconds.
 	nodes := []*upstream.Node{
@@ -42,17 +43,26 @@ func (d *DemoDiscovery) Start(name string, eb *eventbus.EventBus[[]*upstream.Nod
 			URL:         &url.URL{Scheme: "http", Host: DemoServiceAddress, Path: "/ip"},
 		},
 	}
-	t := 10 * time.Second
-	if interval, ok := cfg["interval"].(string); ok {
-		if dur, err := time.ParseDuration(interval); err == nil {
-			t = dur
-		}
-	}
+	t := 1 * time.Second
+	// if interval, ok := cfg["interval"].(string); ok {
+	// 	if dur, err := time.ParseDuration(interval); err == nil {
+	// 		t = dur
+	// 	}
+	// }
 	go func() {
 		// simulate pushing updated nodes every t seconds with same servername and url
-		eb.Publish(types.ServiceDiscoveryEventKey(name, "header"), []*upstream.Node{nodes[0]})
-		eb.Publish(types.ServiceDiscoveryEventKey(name, "ip"), []*upstream.Node{nodes[1]})
-		time.Sleep(t)
+		//TODO: add context cancellation
+		for {
+			select {
+			case <-ctx.Done():
+				d.log.Info("Demo discovery stopped")
+				return
+			case <-time.Tick(t):
+				d.log.Infof("Demo discovery publishing nodes for service %s: %v", name, nodes)
+				eb.Publish(types.ServiceDiscoveryEventKey(name, "header"), []*upstream.Node{nodes[0]})
+				eb.Publish(types.ServiceDiscoveryEventKey(name, "ip"), []*upstream.Node{nodes[1]})
+			}
+		}
 	}()
 	return nil
 }

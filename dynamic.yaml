@@ -1,10 +1,10 @@
 routes:
-  - name: route1
-    listener: http
-    matches:
-      - path: /headers
-    upstream:
-      name: backend
+  # - name: route1
+  #   listener: http
+  #   matches:
+  #     - path: /headers
+  #   upstream:
+  #     name: backend
   - name: slowheaders
     listener: http
     matches:
@@ -28,7 +28,7 @@ routes:
   - name: discovery
     listener: http
     matches:
-      - path: /discover
+      - path: /headers
     upstream:
       discovery:
         type: demo

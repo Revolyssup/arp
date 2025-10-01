@@ -74,7 +74,7 @@ func (a *ARP) Run(ctx context.Context) error {
 	a.cancelFunc = cancel
 
 	// Initialize components
-	if err := a.init(); err != nil {
+	if err := a.init(ctx); err != nil {
 		return fmt.Errorf("failed to initialize components: %w", err)
 	}
 
@@ -93,13 +93,13 @@ func (a *ARP) Run(ctx context.Context) error {
 	return nil
 }
 
-func (a *ARP) init() error {
+func (a *ARP) init(ctx context.Context) error {
 	configBus := eventbus.NewEventBus[config.Dynamic](a.log.WithComponent("config_bus"))
-
-	discoveryManager, err := manager.NewDiscoveryManager(a.config.DiscoveryConfigs, a.log)
+	discoveryManager, err := manager.NewDiscoveryManager(a.log)
 	if err != nil {
 		return fmt.Errorf("failed to initialize discovery manager: %w", err)
 	}
+	discoveryManager.InitDiscovery(ctx, a.config.DiscoveryConfigs)
 	routeFactory := route.NewFactory()
 	upstreamFactory := upstream.NewFactory()
 
