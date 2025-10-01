@@ -43,15 +43,14 @@ func (d *DemoDiscovery) Start(ctx context.Context, name string, eb *eventbus.Eve
 			URL:         &url.URL{Scheme: "http", Host: DemoServiceAddress, Path: "/ip"},
 		},
 	}
-	t := 1 * time.Second
-	// if interval, ok := cfg["interval"].(string); ok {
-	// 	if dur, err := time.ParseDuration(interval); err == nil {
-	// 		t = dur
-	// 	}
-	// }
+	t := 10 * time.Second
+	if interval, ok := cfg["interval"].(string); ok {
+		if dur, err := time.ParseDuration(interval); err == nil {
+			t = dur
+		}
+	}
 	go func() {
 		// simulate pushing updated nodes every t seconds with same servername and url
-		//TODO: add context cancellation
 		for {
 			select {
 			case <-ctx.Done():

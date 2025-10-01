@@ -58,7 +58,7 @@ func (d *DiscoveryManager) getDiscovery(config config.DiscoveryRef, serviceName 
 	return nil, fmt.Errorf("unsupported discovery type: %s", config.Type)
 }
 
-func (d *DiscoveryManager) GetDiscovery(ups *upstream.Upstream, discoveryManager *DiscoveryManager, discoveryConf config.DiscoveryRef, serviceName string) chan error {
+func (d *DiscoveryManager) StartDiscovery(ups *upstream.Upstream, discoveryManager *DiscoveryManager, discoveryConf config.DiscoveryRef, serviceName string) chan error {
 	errChan := make(chan error, 1)
 	nodesEvent, err := discoveryManager.getDiscovery(discoveryConf, serviceName)
 	if err != nil {

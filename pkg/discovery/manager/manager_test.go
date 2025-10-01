@@ -45,7 +45,7 @@ func TestUpstreamWithDemoDiscovery(t *testing.T) {
 		t.Fatalf("Failed to create upstream with discovery: %v", err)
 	}
 	discoveryManager.InitDiscovery(t.Context(), conf)
-
+	discoveryManager.StartDiscovery(headerup, discoveryManager, headerupConf.Discovery, "header")
 	if headerup == nil {
 		t.Fatal("Expected upstream to be non-nil")
 	}
@@ -59,14 +59,14 @@ func TestUpstreamWithDemoDiscovery(t *testing.T) {
 		t.Fatal("Expected upstream to be non-nil")
 	}
 	discoveryManager.InitDiscovery(t.Context(), conf)
-	time.Sleep(1 * time.Second) // wait for discovery to populate nodes
+	_ = discoveryManager.StartDiscovery(up, discoveryManager, ipupConf.Discovery, "ip")
+	time.Sleep(2 * time.Second) // wait for discovery to populate nodes
 	//first try
 	firstNode := up.SelectNode()
 	//assert returned service
 	if firstNode.ServiceName != "ip" {
 		t.Errorf("Expected first node service name to be 'ip', got %v", firstNode.ServiceName)
 	}
-	time.Sleep(1 * time.Second)
 	secondNode := headerup.SelectNode()
 	if secondNode.ServiceName != "header" {
 		t.Errorf("Expected second node service name to be 'header', got %v", secondNode.ServiceName)

@@ -72,7 +72,7 @@ func (r *Router) UpdateRoutes(routeConfigs []config.RouteConfig, upstreamConfigs
 
 		//init service discovery
 		if upstreamConfig.Discovery.Type != "" && r.discoveryManager != nil {
-			errChan := r.discoveryManager.GetDiscovery(up, r.discoveryManager, upstreamConfig.Discovery, upstreamConfig.Service)
+			errChan := r.discoveryManager.StartDiscovery(up, r.discoveryManager, upstreamConfig.Discovery, upstreamConfig.Service)
 			go func() {
 				for err := range errChan {
 					if err != nil {
