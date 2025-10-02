@@ -3,7 +3,7 @@
 ## Installation
 
 ```bash
-VERSION=v0.1.0
+VERSION=v0.1.1
 wget https://github.com/Revolyssup/arp/releases/download/${VERSION}/arp-${VERSION}-linux-amd64
 mv arp-v0.1.0-linux-amd64 ./arp
 chmod +x ./arp
