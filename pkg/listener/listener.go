@@ -2,6 +2,7 @@ package listener
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net/http"
 
@@ -40,6 +41,18 @@ func NewListener(cfg config.ListenerConfig, discoveryManager *manager.DiscoveryM
 		Addr:    fmt.Sprintf(":%d", cfg.Port),
 		Handler: handler,
 	}
+	if cfg.TLS != nil {
+		cert, err := tls.LoadX509KeyPair(cfg.TLS.CertFile, cfg.TLS.KeyFile)
+		if err != nil {
+			logger.Errorf("Failed to load TLS certificate: %v", err)
+		}
+
+		l.server.TLSConfig = &tls.Config{
+			Certificates: []tls.Certificate{cert},
+			NextProtos:   []string{"h2", "http/1.1"},
+		}
+	}
+
 	utils.GoWithRecover(func() {
 		for dynCfg := range eventBus.Subscribe(types.RouteEventKey(cfg.Name)) {
 			l.updateRoutes(dynCfg.Routes, dynCfg.Upstreams, dynCfg.Plugins)

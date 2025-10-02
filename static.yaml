@@ -4,7 +4,11 @@ listeners:
     http2: true
   - name: http2
     port: 8081
-
+  - name: https
+    port: 8443
+    tls:
+      certFile: "./server.crt"
+      keyFile: "./server.key"
 providers:
   - name: file
     type: file
