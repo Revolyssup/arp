@@ -71,8 +71,8 @@ For http requests, when `http2: true` inside listener then http2 over clear text
 ## TODO
 
 - Support HTTP2(ARP<->Upstream)
-- TLS termination support
 - More efficient route matching
 - Plugins for most common use cases like - traffic split, auth, redirects, circuit breaking etc.
 - Support for docker as service discoverer.
 - Refactor LRU cache cleanup to be more efficient.
+- mTLS support
