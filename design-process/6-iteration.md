@@ -16,6 +16,11 @@ A very naive implementation of round tripper has been added which takes control 
 
 Inspired by traefik's internally used safe package, a helper function GoWithRecover is put in utils for error handling in cases of panic. Previous the upstream was importing discovery and the relationship was pretty messed up. Now all discovery related code is taken out of upstream package. Now upstream is a dependency of discovery and not the other way around.
 
+## Bug in LRUCache
+
+The cleanup function for a key was cancelled only on the whole Cache reset. But when the same key is Set again or the key is deleted, we still want to stop the cleanup goroutines as either that key no longer exists(deleted) or a new cleanup function exists for it(updated).
+I feel uncomfortable having one cleanup goroutine per key. Adding this to the TODO. Maybe a single separate garbage collector go routine that will be listening on Events will be better.
+
 ## TODO
 
 - Better error handling and context passing.
@@ -23,3 +28,4 @@ Inspired by traefik's internally used safe package, a helper function GoWithReco
 - More efficient route matching
 - Plugins for most common use cases like - traffic split, auth, redirects, circuit breaking etc.
 - Support for docker as service discoverer.
+- Refactor LRU cache cleanup to be more efficient.

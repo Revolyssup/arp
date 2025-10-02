@@ -18,36 +18,73 @@ type Node[T any] struct {
 }
 
 type LRUCache[T any] struct {
-	ctx     context.Context
-	cancel  context.CancelFunc
 	Head    *Node[T]
 	Tail    *Node[T]
 	m       map[string]*Node[T] // ← Store NODES, not just values
 	maxSize int
 	mx      sync.Mutex
 	log     *logger.Logger
+
+	//for managing the cleanup goroutines for TTL
+	ttlCtx     context.Context
+	ttlCancel  context.CancelFunc
+	keyCancels map[string]context.CancelFunc
+	ttlWg      sync.WaitGroup
 }
 
 func NewLRUCache[T any](size int, logger *logger.Logger) *LRUCache[T] {
-	ctx, cancel := context.WithCancel(context.Background()) // should parent context be passed?
+	// Note: Its okay to use Background here as this is the context that will be
+	// used for all TTL goroutines. Passing context from NewLRUCache will complicate things for no reason.
+	// LRUCache exposes a Destroy() method for cleanup which the caller must respect.
+	ctx, cancel := context.WithCancel(context.Background())
 	return &LRUCache[T]{
-		m:       make(map[string]*Node[T]),
-		maxSize: size,
-		ctx:     ctx,
-		cancel:  cancel,
-		log:     logger.WithComponent("LRUCache"),
+		m:          make(map[string]*Node[T]),
+		maxSize:    size,
+		log:        logger.WithComponent("LRUCache"),
+		ttlCtx:     ctx,
+		keyCancels: make(map[string]context.CancelFunc),
+		ttlCancel:  cancel,
 	}
 }
 
-func (nlru *LRUCache[T]) Reset() {
-	nlru.log.Debugf("Resetting LRU Cache")
+func (nlru *LRUCache[T]) Stop() {
+	nlru.log.Debugf("Stopping LRU Cache TTL goroutines")
 	nlru.mx.Lock()
 	defer nlru.mx.Unlock()
-	nlru.cancel()
-	nlru.ctx, nlru.cancel = context.WithCancel(context.Background())
+
+	if nlru.ttlCancel != nil {
+		nlru.ttlCancel()
+	}
+	nlru.ttlWg.Wait()
+}
+
+// Resets but keeps the cache operational
+func (nlru *LRUCache[T]) Reset() {
+	nlru.log.Debugf("Resetting LRU Cache")
+	nlru.Stop()
+
+	nlru.mx.Lock()
+	defer nlru.mx.Unlock()
 	nlru.Head = nil
 	nlru.Tail = nil
 	nlru.m = make(map[string]*Node[T])
+
+	// recreate context for TTL goroutines
+	nlru.ttlCtx, nlru.ttlCancel = context.WithCancel(context.Background())
+}
+
+// Destroys completely - cannot be used after this
+func (nlru *LRUCache[T]) Destroy() {
+	nlru.log.Debugf("Destroying LRU Cache")
+	nlru.Stop()
+	nlru.mx.Lock()
+	defer nlru.mx.Unlock()
+	nlru.Head = nil
+	nlru.Tail = nil
+	nlru.m = nil
+	nlru.ttlCtx = nil
+	nlru.keyCancels = nil
+	nlru.ttlCancel = nil
 }
 
 func (nlru *LRUCache[T]) DebugGet() map[string]T {
@@ -66,6 +103,14 @@ func (nlru *LRUCache[T]) PrintList() string {
 		tmp = tmp.Right
 	}
 	return ans
+}
+
+func (lru *LRUCache[T]) cancelKeyTTL(key string) {
+	if cancel, exists := lru.keyCancels[key]; exists {
+		lru.log.Debugf("Cancelling TTL goroutine for key %s", key)
+		cancel()
+		delete(lru.keyCancels, key)
+	}
 }
 
 // O(1) pop - no traversal needed!
@@ -130,6 +175,8 @@ func (lru *LRUCache[T]) Delete(key string) (ok bool) {
 
 	if node, ok := lru.m[key]; ok {
 		lru.pop(node)
+		// Cancel any existing TTL goroutine for this key
+		lru.cancelKeyTTL(key)
 		delete(lru.m, key)
 		return true
 	}
@@ -141,6 +188,8 @@ func (lru *LRUCache[T]) poptail() {
 	if lru.Tail == nil {
 		return
 	}
+	// Cancel TTL cleanup go routine for the evicted key
+	lru.cancelKeyTTL(lru.Tail.key)
 
 	// Remove from map and list
 	delete(lru.m, lru.Tail.key)
@@ -154,6 +203,8 @@ func (lru *LRUCache[T]) Set(key string, val T, ttl time.Duration) {
 
 	// Check if key already exists
 	if existingNode, exists := lru.m[key]; exists {
+		// Cancel any existing TTL goroutine for this key
+		lru.cancelKeyTTL(key)
 		// Update value and move to front
 		existingNode.value = val
 		lru.pop(existingNode)
@@ -175,12 +226,17 @@ func (lru *LRUCache[T]) Set(key string, val T, ttl time.Duration) {
 		lru.push(newNode)
 	}
 
-	// TTL handling (same as before)
+	// TTL handling with proper context
 	if ttl >= 0 {
+		keyCtx, keyCancel := context.WithCancel(lru.ttlCtx)
+		lru.keyCancels[key] = keyCancel
+		lru.ttlWg.Add(1)
 		utils.GoWithRecover(func() {
+			defer lru.ttlWg.Done()
+
 			select {
-			case <-lru.ctx.Done():
-				lru.log.Debugf("context done, stopping TTL goroutine for key %s", key)
+			case <-keyCtx.Done():
+				lru.log.Debugf("TTL context done for key %s", key)
 				return
 			case <-time.After(ttl):
 				lru.log.Debugf("TTL expired for key %s, deleting from LRU Cache after %v", key, ttl)
@@ -188,6 +244,7 @@ func (lru *LRUCache[T]) Set(key string, val T, ttl time.Duration) {
 			}
 		}, func(err any) {
 			lru.log.Infof("panic in LRU cache ttl goroutine: %v", err)
+			lru.ttlWg.Done()
 		})
 	}
 }
