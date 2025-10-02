@@ -1,6 +1,7 @@
 listeners:
   - name: http
     port: 8080
+    http2: true
   - name: http2
     port: 8081
 

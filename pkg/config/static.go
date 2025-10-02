@@ -8,9 +8,10 @@ type Static struct {
 }
 
 type ListenerConfig struct {
-	Name string     `yaml:"name"`
-	Port int        `yaml:"port"`
-	TLS  *TLSConfig `yaml:"tls,omitempty"`
+	Name  string     `yaml:"name"`
+	Port  int        `yaml:"port"`
+	TLS   *TLSConfig `yaml:"tls,omitempty"`
+	HTTP2 bool       `yaml:"http2,omitempty"`
 }
 
 type TLSConfig struct {

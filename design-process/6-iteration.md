@@ -64,9 +64,13 @@ FAIL github.com/Revolyssup/arp/pkg/eventbus 2.008s
 FAIL
 ```
 
+## Support HTTP2 over cleartext
+
+For http requests, when `http2: true` inside listener then http2 over clear text will be used. `http2: true` will be ignored for https because http2 is supported by default. Note that the roundtripper implemented in ReverseProxy currently only supports http1 and not http2 frames so the upstream request will still be over http1.1
+
 ## TODO
 
-- Better error handling and context passing.
+- Support HTTP2(ARP<->Upstream)
 - TLS termination support
 - More efficient route matching
 - Plugins for most common use cases like - traffic split, auth, redirects, circuit breaking etc.

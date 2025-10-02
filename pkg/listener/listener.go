@@ -14,6 +14,8 @@ import (
 	"github.com/Revolyssup/arp/pkg/types"
 	"github.com/Revolyssup/arp/pkg/upstream"
 	"github.com/Revolyssup/arp/pkg/utils"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 )
 
 type Listener struct {
@@ -29,9 +31,14 @@ func NewListener(cfg config.ListenerConfig, discoveryManager *manager.DiscoveryM
 		router: httprouter.NewRouter(cfg.Name, routerFactory, upstreamFactory, discoveryManager, logger),
 		logger: logger,
 	}
+	var handler http.Handler = l.router
+	if cfg.HTTP2 && cfg.TLS == nil {
+		handler = h2c.NewHandler(l.router, &http2.Server{})
+	}
+
 	l.server = &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.Port),
-		Handler: l.router,
+		Handler: handler,
 	}
 	utils.GoWithRecover(func() {
 		for dynCfg := range eventBus.Subscribe(types.RouteEventKey(cfg.Name)) {
