@@ -33,9 +33,7 @@ func (eb *EventBus[T]) Subscribe(topic string) <-chan T {
 	eb.subscribers[topic] = append(eb.subscribers[topic], ch)
 	// Send the last cached value if it exists
 	if cached, exists := eb.cache[topic]; exists {
-		go func() {
-			ch <- cached
-		}()
+		ch <- cached
 	}
 
 	return ch
