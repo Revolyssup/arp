@@ -9,7 +9,7 @@ import (
 )
 
 func TestLRU(t *testing.T) {
-	lru := NewLRUCache[int](2, logger.New(logger.LevelInfo))
+	lru := NewLRUCache[int](2, 1*time.Second, logger.New(logger.LevelInfo))
 	lru.Set("a", 1, time.Second*2)
 	lru.Set("b", 2, time.Second*2)
 	val, ok := lru.Get("a")
@@ -31,7 +31,7 @@ func TestLRU(t *testing.T) {
 // BenchmarkLRUCache_Set benchmarks setting values in the cache
 func BenchmarkLRUCache_Set(b *testing.B) {
 	log := logger.New(logger.LevelInfo).WithComponent("benchmark")
-	cache := NewLRUCache[string](1000, log)
+	cache := NewLRUCache[string](1000, 1*time.Second, log)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -43,7 +43,7 @@ func BenchmarkLRUCache_Set(b *testing.B) {
 // BenchmarkLRUCache_Get benchmarks getting values from the cache
 func BenchmarkLRUCache_Get(b *testing.B) {
 	log := logger.New(logger.LevelInfo).WithComponent("benchmark")
-	cache := NewLRUCache[string](1000, log)
+	cache := NewLRUCache[string](1000, 1*time.Second, log)
 
 	// Pre-populate cache
 	for i := 0; i < 1000; i++ {
@@ -61,7 +61,7 @@ func BenchmarkLRUCache_Get(b *testing.B) {
 // BenchmarkLRUCache_GetMiss benchmarks cache misses
 func BenchmarkLRUCache_GetMiss(b *testing.B) {
 	log := logger.New(logger.LevelInfo).WithComponent("benchmark")
-	cache := NewLRUCache[string](1000, log)
+	cache := NewLRUCache[string](1000, 1*time.Second, log)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -73,7 +73,7 @@ func BenchmarkLRUCache_GetMiss(b *testing.B) {
 // BenchmarkLRUCache_SetGetMixed benchmarks mixed operations
 func BenchmarkLRUCache_SetGetMixed(b *testing.B) {
 	log := logger.New(logger.LevelInfo).WithComponent("benchmark")
-	cache := NewLRUCache[string](1000, log)
+	cache := NewLRUCache[string](1000, 1*time.Second, log)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -93,7 +93,7 @@ func BenchmarkLRUCache_DifferentSizes(b *testing.B) {
 	for _, size := range sizes {
 		b.Run(fmt.Sprintf("Size_%d", size), func(b *testing.B) {
 			log := logger.New(logger.LevelInfo).WithComponent("benchmark")
-			cache := NewLRUCache[string](size, log)
+			cache := NewLRUCache[string](size, 1*time.Second, log)
 
 			// Pre-populate
 			for i := 0; i < size; i++ {
@@ -112,7 +112,7 @@ func BenchmarkLRUCache_DifferentSizes(b *testing.B) {
 // Benchmark concurrent access
 func BenchmarkLRUCache_Concurrent(b *testing.B) {
 	log := logger.New(logger.LevelInfo).WithComponent("benchmark")
-	cache := NewLRUCache[string](1000, log)
+	cache := NewLRUCache[string](1000, 1*time.Second, log)
 
 	// Pre-populate
 	for i := 0; i < 1000; i++ {

@@ -32,7 +32,7 @@ func NewPathMatcher(logger *logger.Logger) *PathMatcher {
 		}, 0),
 		prefixRoutes: make(map[string][]*Route),
 		logger:       l,
-		cache:        cache.NewLRUCache[[]*Route](100, l),
+		cache:        cache.NewLRUCache[[]*Route](100, 1*time.Second, l),
 	}
 }
 
@@ -92,7 +92,7 @@ func (pm *PathMatcher) Clear() {
 		routes  []*Route
 	}, 0)
 	pm.prefixRoutes = make(map[string][]*Route)
-	pm.cache = cache.NewLRUCache[[]*Route](100, pm.logger)
+	pm.cache = cache.NewLRUCache[[]*Route](100, 1*time.Second, pm.logger)
 }
 
 type MethodMatcher struct {

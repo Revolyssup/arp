@@ -76,7 +76,7 @@ func (p *ResponseCache) ValidateAndSetConfig(conf types.PluginConf) error {
 	}
 	p.config = conf
 	size := conf["size"].(int)
-	p.cache = cache.NewLRUCache[[]byte](size, p.logger)
+	p.cache = cache.NewLRUCache[[]byte](size, 1*time.Second, p.logger)
 	p.logger.Debugf("Initialized ResponseCache plugin with size %d", size)
 	return nil
 }
