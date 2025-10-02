@@ -62,14 +62,11 @@ func (eb *EventBus[T]) Unsubscribe(topic string, ch <-chan T) {
 
 func (eb *EventBus[T]) Publish(topic string, data T) {
 	eb.mx.Lock()
+	defer eb.mx.Unlock()
 	// Update cache first
 	eb.cache[topic] = data
 
-	// Get current subscribers for the topic
-	subscribers := make([]chan T, len(eb.subscribers[topic]))
-	copy(subscribers, eb.subscribers[topic])
-	eb.mx.Unlock()
-	for _, ch := range subscribers {
+	for _, ch := range eb.subscribers[topic] {
 		select {
 		case ch <- data:
 			// Successfully sent

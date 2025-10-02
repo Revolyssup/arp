@@ -21,6 +21,49 @@ Inspired by traefik's internally used safe package, a helper function GoWithReco
 The cleanup function for a key was cancelled only on the whole Cache reset. But when the same key is Set again or the key is deleted, we still want to stop the cleanup goroutines as either that key no longer exists(deleted) or a new cleanup function exists for it(updated).
 I feel uncomfortable having one cleanup goroutine per key. Adding this to the TODO. Maybe a single separate garbage collector go routine that will be listening on Events will be better.
 
+## fix race condition in EventBus
+
+Though I tried to optimise Subcribe() by copying the subscribers slice and releasing the lock. I have realised the following scenario can cause a panic. Subscribe() starts and takes long time due to large number of subscibed channels, Unsubscribe() starts and closes the channel and removes from subscriber list but the Subscribe() is working on copied list so it will still try to send to closed channel.
+
+```go
+//older function with potential panic
+func (eb *EventBus[T]) Publish(topic string, data T) {
+ eb.mx.Lock()
+ // Update cache first
+ eb.cache[topic] = data
+
+ // Get current subscribers for the topic
+ subscribers := make([]chan T, len(eb.subscribers[topic]))
+ copy(subscribers, eb.subscribers[topic])
+ eb.mx.Unlock()
+ for _, ch := range subscribers {
+  time.Sleep(2 * time.Second) // simulate large number of subscribers
+  select {
+  case ch <- data:
+   // Successfully sent
+  default:
+   // Channel is full, log warning but don't block
+   eb.log.Infof("WARNING: Channel full for topic %s, dropping message", topic)
+  }
+ }
+}
+```
+
+```bash
+go test ./pkg/eventbus
+panic: send on closed channel
+
+goroutine 7 [running]:
+github.com/Revolyssup/arp/pkg/eventbus.(*EventBus[...]).Publish(0x639620, {0x5ec876, 0x5}, {0x5ec66f, 0x4})
+        /home/ashish/dev/arp/pkg/eventbus/eventbus.go:76 +0x1d7
+github.com/Revolyssup/arp/pkg/eventbus.TestRaceCondition.func1()
+        /home/ashish/dev/arp/pkg/eventbus/eventbus_test.go:18 +0x37
+created by github.com/Revolyssup/arp/pkg/eventbus.TestRaceCondition in goroutine 6
+        /home/ashish/dev/arp/pkg/eventbus/eventbus_test.go:17 +0xff
+FAIL github.com/Revolyssup/arp/pkg/eventbus 2.008s
+FAIL
+```
+
 ## TODO
 
 - Better error handling and context passing.
