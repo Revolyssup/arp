@@ -16,7 +16,7 @@ import (
 
 const bufferSize = 32 * 1024
 
-// Service remains the same
+// Service holds resources shared across multiple reverse proxy instances
 type Service struct {
 	buf *utils.Pool[[]byte]
 	log *logger.Logger
@@ -33,25 +33,28 @@ func NewService(log *logger.Logger) *Service {
 
 type UpgradeHandler func(http.ResponseWriter, *http.Request, net.Conn, *http.Response)
 
-type ConnPool struct {
+type connPool struct {
 	target *url.URL
 	pool   *utils.Pool[net.Conn]
 	logger *logger.Logger
 }
 
-func NewConnPool(target *url.URL, logger *logger.Logger) *ConnPool {
-	return &ConnPool{
+func newconnPool(target *url.URL, logger *logger.Logger) *connPool {
+	return &connPool{
 		target: target,
 		pool: utils.NewPool(func() net.Conn {
-			//TODO: Is it a good idea to ignore error here?
-			conn, _ := net.Dial("tcp", target.Host)
+			conn, err := net.Dial("tcp", target.Host)
+			if err != nil {
+				logger.Errorf("Failed to create connection to %s: %v", target.Host, err)
+				return nil
+			}
 			return conn
 		}),
 		logger: logger.WithComponent("conn_pool"),
 	}
 }
 
-func (p *ConnPool) Get() (net.Conn, error) {
+func (p *connPool) Get() (net.Conn, error) {
 	conn := p.pool.Get()
 	if conn == nil {
 		return nil, fmt.Errorf("failed to create connection to %s", p.target.Host)
@@ -59,14 +62,14 @@ func (p *ConnPool) Get() (net.Conn, error) {
 	return conn, nil
 }
 
-func (p *ConnPool) Put(conn net.Conn) {
+func (p *connPool) Put(conn net.Conn) {
 	p.pool.Put(conn)
 }
 
 type ReverseProxy struct {
 	logger    *logger.Logger
 	service   *Service
-	connPool  *ConnPool
+	connPool  *connPool
 	targetURL *url.URL
 }
 
@@ -74,7 +77,7 @@ func NewReverseProxy(logger *logger.Logger, service *Service, targetURL *url.URL
 	return &ReverseProxy{
 		logger:    logger.WithComponent("reverse_proxy"),
 		service:   service,
-		connPool:  NewConnPool(targetURL, logger),
+		connPool:  newconnPool(targetURL, logger),
 		targetURL: targetURL,
 	}
 }
