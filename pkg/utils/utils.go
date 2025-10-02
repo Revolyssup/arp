@@ -19,7 +19,12 @@ func NewPool[T any](newFunc func() T) *Pool[T] {
 func (p *Pool[T]) Get() T {
 	item := p.pool.Get()
 	if item == nil {
-		item = p.pool.New().(T)
+		it := p.pool.New()
+		if it == nil {
+			var zero T
+			return zero
+		}
+		item = it.(T)
 	}
 	return item.(T)
 }
