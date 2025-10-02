@@ -1,2 +1,4 @@
 /arp
 bin/arp
+/server.crt
+/server.key
